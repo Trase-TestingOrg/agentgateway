@@ -4335,6 +4335,8 @@ fn convert_webhook(
 		forward_header_matches,
 		failure_mode,
 		action: convert_reject_audit(w.action),
+		// Not yet exposed through the XDS API; file configuration only.
+		include_body: false,
 	})
 }
 

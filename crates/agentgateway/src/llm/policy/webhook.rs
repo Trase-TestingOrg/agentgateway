@@ -43,6 +43,19 @@ impl<'a> EvaluationContext<'a> {
 pub struct GuardrailsPromptRequest {
 	/// body contains the object which is a list of the Message JSON objects from the prompts in the request
 	pub body: PromptMessages,
+	/// request is the parsed request body in the client's format; only with `includeBody`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub request: Option<serde_json::Value>,
+	/// normalized_messages is every message with its text, tool calls, tool results and reasoning; only with `includeBody`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub normalized_messages: Option<serde_json::Value>,
+}
+
+/// The `includeBody` additions to a request payload.
+#[derive(Debug, Clone, Default)]
+pub(super) struct RequestExtras {
+	pub request: Option<serde_json::Value>,
+	pub normalized_messages: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,6 +74,9 @@ pub struct GuardrailsPromptResponse {
 pub struct GuardrailsResponseRequest {
 	/// body contains the object with a list of Choice that contains the response content from the LLM.
 	pub body: ResponseChoices,
+	/// response is the parsed response in the client's format; only with `includeBody`, never for a streamed window.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub response: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -151,9 +167,12 @@ fn build_request_for_request(
 	context: EvaluationContext<'_>,
 	http_headers: &HeaderMap,
 	messages: Vec<Message>,
+	extras: RequestExtras,
 ) -> anyhow::Result<crate::http::Request> {
 	let body = GuardrailsPromptRequest {
 		body: PromptMessages { messages },
+		request: extras.request,
+		normalized_messages: extras.normalized_messages,
 	};
 	build_request(&body, REQUEST_PATH, webhook, context, http_headers)
 }
@@ -163,9 +182,11 @@ fn build_request_for_response(
 	context: EvaluationContext<'_>,
 	http_headers: &HeaderMap,
 	choices: Vec<ResponseChoice>,
+	response: Option<serde_json::Value>,
 ) -> anyhow::Result<crate::http::Request> {
 	let body = GuardrailsResponseRequest {
 		body: ResponseChoices { choices },
+		response,
 	};
 	build_request(&body, RESPONSE_PATH, webhook, context, http_headers)
 }
@@ -244,12 +265,14 @@ pub(super) async fn send_request(
 	context: EvaluationContext<'_>,
 	http_headers: &HeaderMap,
 	messages: Vec<Message>,
+	extras: RequestExtras,
 ) -> anyhow::Result<GuardrailsPromptResponse> {
 	let whr = with_default_timeout(build_request_for_request(
 		webhook,
 		context,
 		http_headers,
 		messages,
+		extras,
 	)?);
 	let res = Box::pin(
 		client
@@ -271,12 +294,14 @@ pub(super) async fn send_response(
 	context: EvaluationContext<'_>,
 	http_headers: &HeaderMap,
 	choices: Vec<ResponseChoice>,
+	response: Option<serde_json::Value>,
 ) -> anyhow::Result<GuardrailsResponseResponse> {
 	let whr = with_default_timeout(build_request_for_response(
 		webhook,
 		context,
 		http_headers,
 		choices,
+		response,
 	)?);
 	let res = client
 		.with_outbound(OutboundCallKind::Policy, OutboundCallSubtype::Guardrail)
@@ -312,6 +337,7 @@ mod tests {
 			forward_header_matches: vec![],
 			failure_mode: FailureMode::FailClosed,
 			action: RejectAuditAction::Reject,
+			include_body: false,
 		}
 	}
 
@@ -349,6 +375,7 @@ mod tests {
 			EvaluationContext::new(None, None),
 			&HeaderMap::new(),
 			vec![],
+			RequestExtras::default(),
 		)
 		.unwrap();
 		assert_eq!(req.uri().path(), "/request");
@@ -357,6 +384,7 @@ mod tests {
 			EvaluationContext::new(None, None),
 			&HeaderMap::new(),
 			vec![],
+			None,
 		)
 		.unwrap();
 		assert_eq!(resp.uri().path(), "/response");
@@ -374,6 +402,7 @@ mod tests {
 			EvaluationContext::new(Some(&snap), None),
 			&HeaderMap::new(),
 			vec![],
+			RequestExtras::default(),
 		)
 		.unwrap();
 		assert_eq!(req.uri().path(), "/v3/guardrails/agentgateway/request");
@@ -402,6 +431,7 @@ mod tests {
 			EvaluationContext::new(Some(&snap), Some(&serde_json::json!({"model": "llama3.2"}))),
 			&HeaderMap::new(),
 			vec![],
+			RequestExtras::default(),
 		)
 		.unwrap();
 		assert_eq!(
@@ -426,6 +456,7 @@ mod tests {
 			EvaluationContext::new(Some(&snap), None),
 			&HeaderMap::new(),
 			vec![],
+			RequestExtras::default(),
 		)
 		.unwrap();
 		assert_eq!(req.headers().get("x-user").unwrap(), "user-123");
@@ -443,6 +474,7 @@ mod tests {
 			EvaluationContext::new(Some(&snap), None),
 			&HeaderMap::new(),
 			vec![],
+			RequestExtras::default(),
 		)
 		.unwrap();
 		// Claims are only exposed to CEL evaluation; leaking them onto the request
@@ -468,6 +500,7 @@ mod tests {
 			EvaluationContext::new(Some(&snap), None),
 			&HeaderMap::new(),
 			vec![],
+			RequestExtras::default(),
 		)
 		.unwrap();
 		assert!(req.headers().get("x-missing").is_none());
@@ -490,6 +523,7 @@ mod tests {
 			EvaluationContext::new(None, None),
 			&HeaderMap::new(),
 			vec![],
+			RequestExtras::default(),
 		)
 		.unwrap();
 		// Static expressions still work without a snapshot...
@@ -585,6 +619,7 @@ mod tests {
 			EvaluationContext::new(None, None),
 			&HeaderMap::new(),
 			vec![],
+			RequestExtras::default(),
 		)
 		.await
 		.expect("https webhook reachable with backendTLS");
@@ -604,11 +639,252 @@ mod tests {
 			EvaluationContext::new(None, None),
 			&HeaderMap::new(),
 			vec![],
+			RequestExtras::default(),
 		)
 		.await;
 		assert!(
 			plaintext.is_err(),
 			"plaintext dial to a TLS webhook must fail"
+		);
+	}
+
+	async fn body_json(req: crate::http::Request) -> serde_json::Value {
+		use http_body_util::BodyExt as _;
+		let bytes = req.into_body().collect().await.unwrap().to_bytes();
+		serde_json::from_slice(&bytes).unwrap()
+	}
+
+	/// Without `includeBody` the payload is exactly what it was before the field existed.
+	#[tokio::test]
+	async fn payload_is_unchanged_without_include_body() {
+		let wh = webhook(vec![]);
+		let messages = vec![Message {
+			role: "user".into(),
+			content: "hi".into(),
+		}];
+		let req = build_request_for_request(
+			&wh,
+			EvaluationContext::new(None, None),
+			&HeaderMap::new(),
+			messages,
+			RequestExtras::default(),
+		)
+		.unwrap();
+		assert_eq!(
+			body_json(req).await,
+			serde_json::json!({"body": {"messages": [{"role": "user", "content": "hi"}]}})
+		);
+		let choices = vec![ResponseChoice {
+			message: Message {
+				role: "assistant".into(),
+				content: "yo".into(),
+			},
+		}];
+		let resp = build_request_for_response(
+			&wh,
+			EvaluationContext::new(None, None),
+			&HeaderMap::new(),
+			choices,
+			None,
+		)
+		.unwrap();
+		assert_eq!(
+			body_json(resp).await,
+			serde_json::json!({"body": {"choices": [{"message": {"role": "assistant", "content": "yo"}}]}})
+		);
+	}
+
+	#[tokio::test]
+	async fn include_body_adds_request_response_and_normalized_messages() {
+		let wh = webhook(vec![]);
+		let extras = RequestExtras {
+			request: Some(serde_json::json!({"model": "m", "tools": [{"type": "function"}]})),
+			normalized_messages: Some(serde_json::json!([{"role": "user", "parts": []}])),
+		};
+		let req = build_request_for_request(
+			&wh,
+			EvaluationContext::new(None, None),
+			&HeaderMap::new(),
+			vec![],
+			extras,
+		)
+		.unwrap();
+		let body = body_json(req).await;
+		assert_eq!(body["request"]["tools"][0]["type"], "function");
+		assert_eq!(body["normalized_messages"][0]["role"], "user");
+		assert_eq!(body["body"]["messages"], serde_json::json!([]));
+
+		let resp = build_request_for_response(
+			&wh,
+			EvaluationContext::new(None, None),
+			&HeaderMap::new(),
+			vec![],
+			Some(serde_json::json!({"usage": {"total_tokens": 3}})),
+		)
+		.unwrap();
+		assert_eq!(
+			body_json(resp).await["response"]["usage"]["total_tokens"],
+			3
+		);
+	}
+
+	/// With `includeBody` the webhook sees the tools, the tool call and the tool result the
+	/// message list cannot carry; without it the payload is the message list alone.
+	#[tokio::test]
+	async fn include_body_sends_tools_and_tool_calls_through_the_request_guard() {
+		use wiremock::matchers::{method, path};
+		use wiremock::{Mock, MockServer, ResponseTemplate};
+
+		use crate::types::agent::Target;
+
+		let server = MockServer::start().await;
+		Mock::given(method("POST"))
+			.and(path("/request"))
+			.respond_with(
+				ResponseTemplate::new(200).set_body_json(serde_json::json!({"action": {"reason": "ok"}})),
+			)
+			.mount(&server)
+			.await;
+		let client = crate::test_helpers::policy_client();
+		let request = serde_json::json!({
+			"model": "gpt-4o",
+			"tools": [{"type": "function", "function": {"name": "search_patients", "parameters": {"type": "object"}}}],
+			"tool_choice": "auto",
+			"messages": [
+				{"role": "system", "content": "be brief"},
+				{"role": "user", "content": "find Jane"},
+				{"role": "assistant", "content": null, "tool_calls": [
+					{"id": "call_1", "type": "function", "function": {"name": "search_patients", "arguments": "{\"name\":\"Jane\"}"}}
+				]},
+				{"role": "tool", "tool_call_id": "call_1", "content": "mrn 123"}
+			]
+		});
+		for include_body in [false, true] {
+			let mut wh = webhook(vec![]);
+			wh.target = SimpleBackendReferenceWithPolicies {
+				target: Arc::new(SimpleBackendReference::InlineBackend(Target::Address(
+					*server.address(),
+				))),
+				policies: vec![],
+			};
+			wh.include_body = include_body;
+			let mut req: crate::llm::types::completions::Request =
+				serde_json::from_value(request.clone()).unwrap();
+			let (outcome, _) = super::super::Policy::evaluate_webhook_request(
+				&mut req,
+				&HeaderMap::new(),
+				&client,
+				&wh,
+				None,
+			)
+			.await
+			.expect("webhook reachable");
+			assert!(matches!(outcome, super::super::GuardrailOutcome::None));
+		}
+
+		let received = server.received_requests().await.unwrap();
+		assert_eq!(received.len(), 2);
+		let plain: serde_json::Value = received[0].body_json().unwrap();
+		assert!(plain.get("request").is_none());
+		assert!(plain.get("normalized_messages").is_none());
+		assert_eq!(plain["body"]["messages"].as_array().unwrap().len(), 4);
+
+		let full: serde_json::Value = received[1].body_json().unwrap();
+		assert_eq!(full["body"], plain["body"]);
+		assert_eq!(
+			full["request"]["tools"][0]["function"]["name"],
+			"search_patients"
+		);
+		assert_eq!(full["request"]["tool_choice"], "auto");
+		assert_eq!(full["request"]["model"], "gpt-4o");
+		let part_types: Vec<&str> = full["normalized_messages"]
+			.as_array()
+			.unwrap()
+			.iter()
+			.flat_map(|m| m["parts"].as_array().unwrap().iter())
+			.map(|p| p["type"].as_str().unwrap())
+			.collect();
+		assert!(part_types.contains(&"toolCall"), "{part_types:?}");
+		assert!(part_types.contains(&"toolResult"), "{part_types:?}");
+	}
+
+	/// A buffered response carries `response` (tool calls, finish reason, usage); a streamed
+	/// window never does.
+	#[tokio::test]
+	async fn include_body_sends_the_parsed_response_but_not_a_streamed_window() {
+		use wiremock::matchers::{method, path};
+		use wiremock::{Mock, MockServer, ResponseTemplate};
+
+		use crate::types::agent::Target;
+
+		let server = MockServer::start().await;
+		Mock::given(method("POST"))
+			.and(path("/response"))
+			.respond_with(
+				ResponseTemplate::new(200).set_body_json(serde_json::json!({"action": {"reason": "ok"}})),
+			)
+			.mount(&server)
+			.await;
+		let client = crate::test_helpers::policy_client();
+		let mut wh = webhook(vec![]);
+		wh.target = SimpleBackendReferenceWithPolicies {
+			target: Arc::new(SimpleBackendReference::InlineBackend(Target::Address(
+				*server.address(),
+			))),
+			policies: vec![],
+		};
+		wh.include_body = true;
+
+		let mut resp: crate::llm::types::completions::Response = serde_json::from_value(serde_json::json!({
+			"id": "chatcmpl-1", "object": "chat.completion", "created": 1, "model": "gpt-4o-2024-08-06",
+			"choices": [{"index": 0, "finish_reason": "tool_calls", "message": {
+				"role": "assistant", "content": null,
+				"tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "search_patients", "arguments": "{}"}}]
+			}}],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+		}))
+		.unwrap();
+		super::super::Policy::evaluate_webhook_response(
+			&mut resp,
+			&HeaderMap::new(),
+			&client,
+			&wh,
+			None,
+		)
+		.await
+		.expect("webhook reachable");
+
+		let mut window = super::super::TextResponse {
+			content: "a window of text".to_string(),
+		};
+		super::super::Policy::evaluate_webhook_response(
+			&mut window,
+			&HeaderMap::new(),
+			&client,
+			&wh,
+			None,
+		)
+		.await
+		.expect("webhook reachable");
+
+		let received = server.received_requests().await.unwrap();
+		assert_eq!(received.len(), 2);
+		let buffered: serde_json::Value = received[0].body_json().unwrap();
+		assert_eq!(buffered["response"]["model"], "gpt-4o-2024-08-06");
+		assert_eq!(
+			buffered["response"]["choices"][0]["finish_reason"],
+			"tool_calls"
+		);
+		assert_eq!(
+			buffered["response"]["choices"][0]["message"]["tool_calls"][0]["function"]["name"],
+			"search_patients"
+		);
+		assert_eq!(buffered["response"]["usage"]["total_tokens"], 15);
+		let streamed: serde_json::Value = received[1].body_json().unwrap();
+		assert!(streamed.get("response").is_none());
+		assert_eq!(
+			streamed["body"]["choices"][0]["message"]["content"],
+			"a window of text"
 		);
 	}
 }

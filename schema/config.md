@@ -7785,6 +7785,7 @@ These types are used by many fields. Fields of these types link here instead of 
 |`<Guardrails>.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`<Guardrails>.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`<Guardrails>.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`<Guardrails>.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`<Guardrails>.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`<Guardrails>.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`<Guardrails>.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -9221,6 +9222,7 @@ These types are used by many fields. Fields of these types link here instead of 
 |`<Guardrails>.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`<Guardrails>.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`<Guardrails>.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`<Guardrails>.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`<Guardrails>.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`<Guardrails>.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`<Guardrails>.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|

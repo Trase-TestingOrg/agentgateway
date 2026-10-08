@@ -5499,6 +5499,10 @@
         "action": {
           "description": "Whether to enforce the webhook's verdict or only observe it.\nDefaults to `reject` (enforce).",
           "$ref": "#/$defs/RejectAuditAction"
+        },
+        "includeBody": {
+          "description": "Include the full parsed request (`request`, `normalized_messages`) or response (`response`)\nin the webhook payload. Windows of a streamed response never carry them.\nDefaults to `false`.",
+          "type": "boolean"
         }
       },
       "additionalProperties": false,
