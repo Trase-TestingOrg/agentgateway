@@ -834,6 +834,7 @@
 |`binds[].listeners[].routes[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`binds[].listeners[].routes[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`binds[].listeners[].routes[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`binds[].listeners[].routes[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`binds[].listeners[].routes[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -2260,6 +2261,7 @@
 |`binds[].listeners[].routes[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`binds[].listeners[].routes[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`binds[].listeners[].routes[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`binds[].listeners[].routes[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`binds[].listeners[].routes[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -8555,6 +8557,7 @@
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -9981,6 +9984,7 @@
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -12521,6 +12525,7 @@
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -13947,6 +13952,7 @@
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -16449,6 +16455,7 @@
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -17875,6 +17882,7 @@
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`binds[].listeners[].routes[].backends[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -22590,6 +22598,7 @@
 |`policies[].policy.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`policies[].policy.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`policies[].policy.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`policies[].policy.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`policies[].policy.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`policies[].policy.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`policies[].policy.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -24016,6 +24025,7 @@
 |`policies[].policy.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`policies[].policy.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`policies[].policy.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`policies[].policy.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`policies[].policy.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`policies[].policy.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`policies[].policy.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -30311,6 +30321,7 @@
 |`backends[].ai.policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`backends[].ai.policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].ai.policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`backends[].ai.policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`backends[].ai.policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`backends[].ai.policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].ai.policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -31737,6 +31748,7 @@
 |`backends[].ai.policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`backends[].ai.policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].ai.policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`backends[].ai.policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -34277,6 +34289,7 @@
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -35703,6 +35716,7 @@
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -38203,6 +38217,7 @@
 |`backends[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`backends[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`backends[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`backends[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`backends[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -39629,6 +39644,7 @@
 |`backends[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`backends[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`backends[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`backends[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`backends[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`backends[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -41204,6 +41220,7 @@
 |`routeGroups[].routes[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routeGroups[].routes[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routeGroups[].routes[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routeGroups[].routes[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`routeGroups[].routes[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -42630,6 +42647,7 @@
 |`routeGroups[].routes[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routeGroups[].routes[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routeGroups[].routes[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routeGroups[].routes[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`routeGroups[].routes[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -48925,6 +48943,7 @@
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -50351,6 +50370,7 @@
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -52891,6 +52911,7 @@
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -54317,6 +54338,7 @@
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -56819,6 +56841,7 @@
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routeGroups[].routes[].backends[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -58245,6 +58268,7 @@
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routeGroups[].routes[].backends[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routeGroups[].routes[].backends[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -62489,6 +62513,7 @@
 |`routes[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routes[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routes[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routes[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`routes[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -63915,6 +63940,7 @@
 |`routes[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routes[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routes[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routes[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`routes[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -70210,6 +70236,7 @@
 |`routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routes[].backends[].ai.policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routes[].backends[].ai.policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`routes[].backends[].ai.policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].ai.policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -71636,6 +71663,7 @@
 |`routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routes[].backends[].ai.policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routes[].backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`routes[].backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].ai.policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -74176,6 +74204,7 @@
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -75602,6 +75631,7 @@
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].ai.groups[].providers[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -78104,6 +78134,7 @@
 |`routes[].backends[].policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routes[].backends[].policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routes[].backends[].policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routes[].backends[].policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`routes[].backends[].policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -79530,6 +79561,7 @@
 |`routes[].backends[].policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`routes[].backends[].policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`routes[].backends[].policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`routes[].backends[].policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`routes[].backends[].policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`routes[].backends[].policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -82484,6 +82516,7 @@
 |`llm.models[].guardrails.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`llm.models[].guardrails.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`llm.models[].guardrails.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`llm.models[].guardrails.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`llm.models[].guardrails.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`llm.models[].guardrails.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`llm.models[].guardrails.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -83910,6 +83943,7 @@
 |`llm.models[].guardrails.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`llm.models[].guardrails.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`llm.models[].guardrails.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`llm.models[].guardrails.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`llm.models[].guardrails.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`llm.models[].guardrails.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`llm.models[].guardrails.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -86406,6 +86440,7 @@
 |`llm.policies.guardrails.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`llm.policies.guardrails.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`llm.policies.guardrails.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`llm.policies.guardrails.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`llm.policies.guardrails.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`llm.policies.guardrails.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`llm.policies.guardrails.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -87832,6 +87867,7 @@
 |`llm.policies.guardrails.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`llm.policies.guardrails.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`llm.policies.guardrails.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`llm.policies.guardrails.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`llm.policies.guardrails.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`llm.policies.guardrails.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`llm.policies.guardrails.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|
@@ -89981,6 +90017,7 @@
 |`mcp.policies.ai.promptGuard.request[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`mcp.policies.ai.promptGuard.request[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`mcp.policies.ai.promptGuard.request[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`mcp.policies.ai.promptGuard.request[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`mcp.policies.ai.promptGuard.request[].openAIModeration`|object|Use OpenAI moderation to evaluate the prompt.|
 |`mcp.policies.ai.promptGuard.request[].openAIModeration.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`mcp.policies.ai.promptGuard.request[].openAIModeration.model`|string|Moderation model to use. Defaults to `omni-moderation-latest`.|
@@ -91407,6 +91444,7 @@
 |`mcp.policies.ai.promptGuard.response[].webhook.forwardHeaderMatches[].value.regex`|string||
 |`mcp.policies.ai.promptGuard.response[].webhook.failureMode`|enum|Behavior when the webhook is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`mcp.policies.ai.promptGuard.response[].webhook.action`|enum|Whether to enforce the webhook's verdict or only observe it.<br>Defaults to `reject` (enforce).<br>Possible values: `reject`, `audit`.|
+|`mcp.policies.ai.promptGuard.response[].webhook.includeBody`|boolean|Include the full parsed request (`request`, `normalized_messages`) or response (`response`)<br>in the webhook payload. Windows of a streamed response never carry them.<br>Defaults to `false`.|
 |`mcp.policies.ai.promptGuard.response[].bedrockGuardrails`|object|Use AWS Bedrock Guardrails to evaluate the response.<br>Configuration for AWS Bedrock Guardrails integration.|
 |`mcp.policies.ai.promptGuard.response[].bedrockGuardrails.failureMode`|enum|Behavior when the provider is unreachable or returns an error.<br>Defaults to `failClosed`.<br>Possible values: `failClosed`, `failOpen`.|
 |`mcp.policies.ai.promptGuard.response[].bedrockGuardrails.guardrailIdentifier`|string|The unique identifier of the guardrail|

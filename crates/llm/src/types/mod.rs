@@ -94,6 +94,10 @@ pub trait ResponseType: Send + Sync {
 	) -> anyhow::Result<()>;
 	fn serialize(&self) -> serde_json::Result<Vec<u8>>;
 	fn visit_text_mut(&mut self, f: &mut dyn FnMut(&mut String));
+	/// The parsed response as JSON, or `None` when there is no response object to give.
+	fn to_value(&self) -> serde_json::Result<Option<serde_json::Value>> {
+		Ok(serde_json::from_slice(&self.serialize()?).ok())
+	}
 }
 
 /// A category of request content that a prompt guard can inspect.

@@ -24,6 +24,7 @@ async fn webhook_fail_open_emits_single_metric() {
 				forward_header_matches: vec![],
 				failure_mode: FailureMode::FailOpen,
 				action: RejectAuditAction::Reject,
+				include_body: false,
 			}),
 		}],
 		response: vec![],

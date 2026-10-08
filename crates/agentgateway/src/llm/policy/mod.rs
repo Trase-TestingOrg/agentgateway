@@ -480,6 +480,11 @@ impl crate::llm::ResponseType for TextResponse {
 		serde_json::to_vec(&self.to_webhook_choices())
 	}
 
+	fn to_value(&self) -> serde_json::Result<Option<serde_json::Value>> {
+		// A streamed window is not a response object; its text is already in the choices.
+		Ok(None)
+	}
+
 	fn visit_text_mut(&mut self, f: &mut dyn FnMut(&mut String)) {
 		f(&mut self.content);
 	}
@@ -1532,16 +1537,24 @@ impl Policy {
 		webhook: &Webhook,
 		original: Option<&cel::RequestSnapshot>,
 	) -> anyhow::Result<(GuardrailOutcome<RequestGuardMutation>, Option<GuardDetail>)> {
-		let llm_request = webhook
-			.headers
-			.iter()
-			.any(|(_, expression)| expression.needs_llm_request())
-			.then(|| req.to_value())
-			.transpose()?;
+		let needs_request = webhook.include_body
+			|| webhook
+				.headers
+				.iter()
+				.any(|(_, expression)| expression.needs_llm_request());
+		let llm_request = needs_request.then(|| req.to_value()).transpose()?;
 		let context = webhook::EvaluationContext::new(original, llm_request.as_ref());
 		let messages = req.get_messages();
+		let extras = if webhook.include_body {
+			webhook::RequestExtras {
+				request: llm_request.clone(),
+				normalized_messages: Some(serde_json::to_value(req.get_messages_v2())?),
+			}
+		} else {
+			webhook::RequestExtras::default()
+		};
 		let headers = Self::get_webhook_forward_headers(http_headers, &webhook.forward_header_matches);
-		let whr = webhook::send_request(client, webhook, context, &headers, messages).await?;
+		let whr = webhook::send_request(client, webhook, context, &headers, messages, extras).await?;
 		if webhook.action == RejectAuditAction::Audit {
 			let (would_action, reason) = match whr.action {
 				RequestAction::Mask(m) => ("mask", m.reason),
@@ -1617,6 +1630,11 @@ impl Policy {
 		original: Option<&cel::RequestSnapshot>,
 	) -> anyhow::Result<(GuardrailOutcome<ResponseGuardMutation>, Option<GuardDetail>)> {
 		let messages = resp.to_webhook_choices();
+		let response = if webhook.include_body {
+			resp.to_value()?
+		} else {
+			None
+		};
 		let headers = Self::get_webhook_forward_headers(http_headers, &webhook.forward_header_matches);
 		let whr = webhook::send_response(
 			client,
@@ -1624,6 +1642,7 @@ impl Policy {
 			webhook::EvaluationContext::new(original, None),
 			&headers,
 			messages,
+			response,
 		)
 		.await?;
 		if webhook.action == RejectAuditAction::Audit {
@@ -2167,6 +2186,11 @@ pub struct Webhook {
 	/// Defaults to `reject` (enforce).
 	#[serde(default, skip_serializing_if = "crate::serdes::is_default")]
 	pub action: RejectAuditAction,
+	/// Include the full parsed request (`request`, `normalized_messages`) or response (`response`)
+	/// in the webhook payload. Windows of a streamed response never carry them.
+	/// Defaults to `false`.
+	#[serde(default, skip_serializing_if = "crate::serdes::is_default")]
+	pub include_body: bool,
 }
 
 #[apply(schema!)]
