@@ -480,6 +480,11 @@ impl crate::llm::ResponseType for TextResponse {
 		serde_json::to_vec(&self.to_webhook_choices())
 	}
 
+	fn to_value(&self) -> serde_json::Result<Option<serde_json::Value>> {
+		// A streamed window is not a response object; its text is already in the choices.
+		Ok(None)
+	}
+
 	fn visit_text_mut(&mut self, f: &mut dyn FnMut(&mut String)) {
 		f(&mut self.content);
 	}
@@ -1532,16 +1537,37 @@ impl Policy {
 		webhook: &Webhook,
 		original: Option<&cel::RequestSnapshot>,
 	) -> anyhow::Result<(GuardrailOutcome<RequestGuardMutation>, Option<GuardDetail>)> {
-		let llm_request = webhook
+		let headers_need_request = webhook
 			.headers
 			.iter()
-			.any(|(_, expression)| expression.needs_llm_request())
+			.any(|(_, expression)| expression.needs_llm_request());
+		let llm_request = (webhook.include_body || headers_need_request)
 			.then(|| req.to_value())
 			.transpose()?;
-		let context = webhook::EvaluationContext::new(original, llm_request.as_ref());
+		// The headers' CEL view keeps the request as parsed; the payload's copy may be shrunk, so
+		// the value is cloned only when both need it.
+		let (context_request, payload_request) = match (headers_need_request, webhook.include_body) {
+			(true, true) => (llm_request.clone(), llm_request),
+			(true, false) => (llm_request, None),
+			(false, _) => (None, llm_request),
+		};
+		let context = webhook::EvaluationContext::new(original, context_request.as_ref());
 		let messages = req.get_messages();
+		let extras = if webhook.include_body {
+			webhook::RequestExtras {
+				request: payload_request.map(|mut request| {
+					if webhook.binary_parts == BinaryParts::Descriptor {
+						webhook::describe_binary_parts(&mut request);
+					}
+					request
+				}),
+				normalized_messages: Some(serde_json::to_value(req.get_messages_v2())?),
+			}
+		} else {
+			webhook::RequestExtras::default()
+		};
 		let headers = Self::get_webhook_forward_headers(http_headers, &webhook.forward_header_matches);
-		let whr = webhook::send_request(client, webhook, context, &headers, messages).await?;
+		let whr = webhook::send_request(client, webhook, context, &headers, messages, extras).await?;
 		if webhook.action == RejectAuditAction::Audit {
 			let (would_action, reason) = match whr.action {
 				RequestAction::Mask(m) => ("mask", m.reason),
@@ -1617,6 +1643,17 @@ impl Policy {
 		original: Option<&cel::RequestSnapshot>,
 	) -> anyhow::Result<(GuardrailOutcome<ResponseGuardMutation>, Option<GuardDetail>)> {
 		let messages = resp.to_webhook_choices();
+		let response = if webhook.include_body {
+			let mut response = resp.to_value()?;
+			if webhook.binary_parts == BinaryParts::Descriptor
+				&& let Some(response) = response.as_mut()
+			{
+				webhook::describe_binary_parts(response);
+			}
+			response
+		} else {
+			None
+		};
 		let headers = Self::get_webhook_forward_headers(http_headers, &webhook.forward_header_matches);
 		let whr = webhook::send_response(
 			client,
@@ -1624,6 +1661,7 @@ impl Policy {
 			webhook::EvaluationContext::new(original, None),
 			&headers,
 			messages,
+			response,
 		)
 		.await?;
 		if webhook.action == RejectAuditAction::Audit {
@@ -2123,6 +2161,21 @@ pub struct NamedRegex {
 	name: String,
 }
 
+/// How inline binary data in `request` and `response` travels with `includeBody`.
+#[apply(schema!)]
+#[cfg_attr(feature = "schema", schemars(rename = "WebhookBinaryParts"))]
+#[derive(Default, Copy, PartialEq, Eq)]
+pub enum BinaryParts {
+	/// Send base64 images, audio and files as the client sent them (default).
+	#[default]
+	#[serde(rename = "inline")]
+	Inline,
+	/// Replace each data string with `omitted:<media type>;bytes=<decoded length>;sha256=<hex>`,
+	/// so the payload stays small and a webhook that reads text never receives the bytes.
+	#[serde(rename = "descriptor")]
+	Descriptor,
+}
+
 /// Defines how the proxy behaves when a guardrail provider is unreachable or
 /// returns an error.
 ///
@@ -2167,6 +2220,15 @@ pub struct Webhook {
 	/// Defaults to `reject` (enforce).
 	#[serde(default, skip_serializing_if = "crate::serdes::is_default")]
 	pub action: RejectAuditAction,
+	/// Include the full parsed request (`request`, `normalized_messages`) or response (`response`)
+	/// in the webhook payload. Windows of a streamed response never carry them.
+	/// Defaults to `false`.
+	#[serde(default, skip_serializing_if = "crate::serdes::is_default")]
+	pub include_body: bool,
+	/// With `includeBody`, how inline binary data (base64 images, audio, files) in `request` and
+	/// `response` travels. Defaults to `inline`.
+	#[serde(default, skip_serializing_if = "crate::serdes::is_default")]
+	pub binary_parts: BinaryParts,
 }
 
 #[apply(schema!)]
