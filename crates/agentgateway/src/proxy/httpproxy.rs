@@ -2410,8 +2410,72 @@ fn resolve_llm_route_type(
 	{
 		return policy.resolve_route(path);
 	}
+	if let Some(route_type) = model_route_type {
+		return route_type;
+	}
+	// A backend with no route overrides classifies the standard LLM paths the same way the model
+	// router does, so `/v1/messages` and `/v1/embeddings` are parsed as what they are. A path the
+	// table does not know keeps the completions default. A known endpoint with no route type of its
+	// own (audio, Bedrock's native paths) and the model listing pass through, since an `ai` backend
+	// used without the model router has nothing to serve them with.
+	match crate::llm::model_router::classify_serving_endpoint(path) {
+		Some(Some(RouteType::Models)) | Some(None) => RouteType::Passthrough,
+		Some(Some(route_type)) => route_type,
+		None => RouteType::Completions,
+	}
+}
 
-	model_route_type.unwrap_or(RouteType::Completions)
+#[cfg(test)]
+mod route_type_tests {
+	use super::*;
+
+	#[test]
+	fn a_backend_without_route_overrides_classifies_standard_paths() {
+		let resolve = |path: &str| resolve_llm_route_type(None, None, path);
+		assert_eq!(resolve("/v1/chat/completions"), RouteType::Completions);
+		assert_eq!(resolve("/v1/messages"), RouteType::Messages);
+		assert_eq!(resolve("/v1/responses"), RouteType::Responses);
+		assert_eq!(resolve("/v1/embeddings"), RouteType::Embeddings);
+		assert_eq!(
+			resolve("/v1/messages/count_tokens"),
+			RouteType::AnthropicTokenCount
+		);
+	}
+
+	#[test]
+	fn known_endpoints_without_a_route_type_pass_through() {
+		let resolve = |path: &str| resolve_llm_route_type(None, None, path);
+		assert_eq!(resolve("/v1/models"), RouteType::Passthrough);
+		assert_eq!(resolve("/v1/audio/transcriptions"), RouteType::Passthrough);
+		assert_eq!(
+			resolve("/model/anthropic.claude-sonnet-4-5/converse"),
+			RouteType::Passthrough
+		);
+	}
+
+	#[test]
+	fn an_unknown_path_keeps_the_completions_default() {
+		assert_eq!(
+			resolve_llm_route_type(None, None, "/some/custom/path"),
+			RouteType::Completions
+		);
+	}
+
+	#[test]
+	fn the_model_router_and_route_overrides_still_win() {
+		assert_eq!(
+			resolve_llm_route_type(None, Some(RouteType::Passthrough), "/v1/messages"),
+			RouteType::Passthrough
+		);
+		let mut policy = llm::Policy::default();
+		policy
+			.routes
+			.insert(agent_core::strng::new("*"), RouteType::Passthrough);
+		assert_eq!(
+			resolve_llm_route_type(Some(&policy), None, "/v1/messages"),
+			RouteType::Passthrough
+		);
+	}
 }
 
 #[allow(clippy::too_many_arguments)]
