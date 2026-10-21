@@ -1,0 +1,96 @@
+name: trase-release
+
+# Builds the fork image from a trase/vX.Y.Z-N git tag (upstream vX.Y.Z plus the
+# stack, build N) with upstream's Dockerfile. The image tag is vX.Y.Z-trase.N.
+# The git tag does not start with "v", so upstream's own release.yml, which
+# triggers on v*.*.* and would push to ghcr.io, never fires in this fork. Built
+# pushes it to Google Artifact Registry, and attaches build provenance naming
+# the source commit. Consumers pin the digest this workflow prints.
+#
+# Repository configuration this needs:
+#   vars.GAR_IMAGE              e.g. us-east1-docker.pkg.dev/trase-global/trase/agentgateway
+#   secrets.GCP_WIF_PROVIDER    projects/N/locations/global/workloadIdentityPools/P/providers/Q
+#   secrets.GCP_SERVICE_ACCOUNT the service account with artifactregistry.writer on the repo
+on:
+  push:
+    tags: ["trase/v*"]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Tag or branch to build
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Version from the tag
+        id: version
+        run: |
+          git_tag="${{ inputs.ref || github.ref_name }}"   # trase/v1.6.0-1
+          upstream="${git_tag#trase/}"; upstream="${upstream%-*}"   # v1.6.0
+          build="${git_tag##*-}"                                   # 1
+          tag="${upstream}-trase.${build}"                         # v1.6.0-trase.1
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          echo "base=$(git describe --tags --abbrev=0 --match 'v*' --exclude '*-trase*')" >> "$GITHUB_OUTPUT"
+      - name: Patch ledger is complete
+        run: trase/check-patches.sh "${{ steps.version.outputs.base }}"
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        id: auth
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          token_format: access_token
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ vars.GAR_IMAGE }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        id: meta
+        with:
+          images: ${{ vars.GAR_IMAGE }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.tag }}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            ai.trase.upstream-base=${{ steps.version.outputs.base }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        id: build
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            GIT_REVISION=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-name: ${{ vars.GAR_IMAGE }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Pin this
+        run: |
+          echo "## ${{ steps.version.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "image: \`${{ vars.GAR_IMAGE }}@${{ steps.build.outputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "image: \`${{ vars.GAR_IMAGE }}@${{ steps.build.outputs.digest }}\`"
+          echo "upstream base: ${{ steps.version.outputs.base }}; patches: $(git rev-list --count ${{ steps.version.outputs.base }}..HEAD)" >> "$GITHUB_STEP_SUMMARY"

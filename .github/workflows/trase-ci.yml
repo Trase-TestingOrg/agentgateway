@@ -1,0 +1,43 @@
+name: trase-ci
+
+# The fork's gate: upstream's own lint and tests on the patch stack, plus the
+# patch ledger check. Runs on every PR into trase/main and on pushes to it.
+on:
+  pull_request:
+    branches: [trase/main]
+  push:
+    branches: [trase/main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ledger:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Every patch commit carries ledger trailers
+        run: trase/check-patches.sh
+
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Schema is regenerated and the tree is clean
+        run: make generate-schema check-clean-repo check-default-members
+      - name: Lint
+        run: make lint
+
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Test
+        run: make test

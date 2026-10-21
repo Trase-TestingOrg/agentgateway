@@ -1,0 +1,41 @@
+name: trase-rebase-probe
+
+# Tries to rebase the patch stack onto upstream main every night and fails
+# loudly on a conflict, so drift is found weeks before the next upstream tag.
+# A scheduled workflow runs only from the repository's default branch; if the
+# default branch is main (the mirror), trigger this by hand or move the
+# schedule by making trase/main the default branch.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: trase/main
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Rebase the stack onto upstream main
+        run: |
+          git config user.name trase-rebase-probe
+          git config user.email noreply@trase.ai
+          git remote add upstream https://github.com/agentgateway/agentgateway.git
+          git fetch --tags upstream main
+          base=$(git describe --tags --abbrev=0 --match 'v*' --exclude '*-trase*')
+          echo "stack base: $base ($(git rev-list --count "$base"..HEAD) patches)"
+          if git rebase --onto upstream/main "$base"; then
+            echo "clean rebase onto upstream/main $(git rev-parse --short upstream/main)"
+          else
+            echo "::error::patch stack conflicts with upstream main; see the log"
+            git status
+            exit 1
+          fi
+      - name: Upstream's lint on the rebased stack
+        run: make lint
