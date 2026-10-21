@@ -18,6 +18,14 @@ patch here.
 
 ## Rules for a patch
 
+The full procedure and the PR checklist are in `trase/PATCHING.md`. The
+rules below are the short form; the checklist is what a PR is reviewed
+against.
+
+- Before writing: decide whether configuration or a receiver-side change does
+  the job (PATCHING.md § 0), then search upstream issues, PRs and the commits
+  ahead of our base on the files you will touch (§ 1). Record both in the PR.
+
 - One behaviour per commit, on a `patch/NNN-slug` branch, with the ledger
   trailers from `trase/PATCHES.md`. `trase/check-patches.sh` fails CI without them.
 - Touch upstream files only inside a patch commit. Fork-only files live under
@@ -32,9 +40,9 @@ patch here.
 - Do not write upstream-facing prose. The commit message, the upstream issue
   and the upstream PR description are the author's own words (upstream's code
   of conduct). Draft them only when asked, and mark the draft as one.
-- Before patching a subsystem, check upstream's open PRs and issues for work
-  that removes or rewrites it; a patch on churning code conflicts on the next
-  rebase.
+- Every new outbound call, every ending of a stream, every copy of a payload
+  and every ordering choice gets a sentence in the PR (PATCHING.md § 3), and
+  a measurement table backs the behaviour (§ 4).
 
 ## Release
 

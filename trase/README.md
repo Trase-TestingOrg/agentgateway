@@ -30,15 +30,18 @@ consumers pin the image by digest, never by tag order.
 
 ## Adding a patch
 
-1. Open an upstream issue or design discussion first when the change is over
-   about a hundred lines or touches a policy surface. Upstream treats those as
-   features and wants the design before the code.
-2. Read [the patch guidelines](#patch-guidelines) below.
+1. Work through [PATCHING.md](PATCHING.md): first whether configuration or a
+   receiver-side change does the job, then the upstream research (issues,
+   PRs, commits ahead of our base on the same files), recorded in the PR.
+2. Open an upstream issue or design discussion when the change is over about
+   a hundred lines or touches a policy surface. Upstream treats those as
+   features and wants the design before the code. Read
+   [the patch guidelines](#patch-guidelines) below.
 3. Branch from `trase/main` as `patch/NNN-slug`, make one commit, and put the
    ledger trailers on it (see [PATCHES.md](PATCHES.md)).
-4. Open a PR into `trase/main`. The PR body explains why Trase needs it and how
-   it is used; the commit message is what upstream will read, in the author's
-   own words.
+4. Open a PR into `trase/main` with the body sections in
+   [PATCHING.md § 6](PATCHING.md#6-pr-body); the commit message is what
+   upstream will read, in the author's own words.
 5. Merge by rebase only, so the stack stays linear.
 6. Open the upstream PR from a branch on this fork, and record its URL in the
    trailer as `Upstream-Status: Submitted <url>`.
