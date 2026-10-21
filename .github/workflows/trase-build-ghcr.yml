@@ -8,9 +8,10 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Branch or tag to build (the top of the patch stack, or trase/main)
+        # No default on purpose: a dispatch that forgets it must fail, not silently build
+        # trase/main and hand back a digest without the patches.
+        description: Branch or tag to build (the top of the patch stack, or trase/main); the build checks out THIS, not the branch the workflow file came from
         required: true
-        default: trase/main
       image_tag:
         description: Image tag to push (for example v1.6.0-trase.1)
         required: true
