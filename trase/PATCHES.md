@@ -24,9 +24,5 @@ until the next tag; `Denied` and `Inappropriate` require the reason.
 | `000-fork-files` | The fork's own files: this directory, the root `CLAUDE.md`, the `trase-*` workflows. | Inappropriate: fork-only files | @jaketrase | 2026-10-21 | never; carried on every rebase |
 | `001-webhook-include-body` | `includeBody` on the prompt-guard webhook: the request payload gains `request` and `normalized_messages`, the response payload gains `response`, so proxy-authorizer fills the model call's context without parsing provider formats. | Pending; thread [agentgateway #2955](https://github.com/agentgateway/agentgateway/issues/2955) | @jaketrase | 2026-10-08 | merged upstream |
 
-Dropped before merge: `006-backend-path-table` (an `ai` backend without
-`ai.routes` classifying paths from the engine's table). The renderer emits the
-full route table as configuration instead; see `PATCHING.md` § 0.
-
 Base: the upstream tag `trase/main` sits on, found with
 `git describe --tags --abbrev=0 --match 'v*'`.

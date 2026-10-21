@@ -14,11 +14,17 @@ A patch is the last option. In order of preference:
 2. A receiver-side change in proxy-authorizer or the recorder.
 3. An engine patch.
 
-Example: patch 006 taught an `ai` backend without `ai.routes` to classify
-paths from the engine's own table. It was written, reviewed, measured and then
-dropped, because the renderer must emit a full route table anyway for the
-passthrough paths, and a non-empty table overrides the patch entirely. The
-route table is config; it needed no fork surface.
+Example, and a cautionary one: patch 006 teaches an `ai` backend without
+`ai.routes` to classify paths from the engine's own table. A review flagged
+passthrough-by-default as a bypass; the patch was narrowed to parsed types
+only; the narrowed patch then could not handle the passthrough paths, so a
+renderer-side route map became necessary, and the patch was dropped as
+redundant with that map. The reasoning was circular: the map was only needed
+because of the narrowing, the map is a copy of the engine's table, and in our
+deployment passthrough on a model connection is governed by `ext_authz` and
+`ext_proc`. The patch was restored in its original shape. The question to
+answer is whether the configuration alternative is the engine doing the work
+or the renderer restating what the engine knows; only the first counts.
 
 The PR body states which config, policy or receiver-side change was considered
 and why it was not enough. "None considered" is not an answer.
