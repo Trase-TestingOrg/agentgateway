@@ -5351,7 +5351,7 @@
           "$ref": "#/$defs/RejectAuditAction"
         },
         "includeBody": {
-          "description": "Include the full parsed request (`request`, `normalized_messages`) or response (`response`)\nin the webhook payload. Windows of a streamed response never carry them.\nDefaults to `false`.",
+          "description": "Include the full parsed request (`request`, `normalized_messages`) or response (`response`)\nin the webhook payload, and `usage` on a buffered response. Windows of a streamed response\ncarry `index` and `stream` instead, and the last one carries `final` and `usage`.\nDefaults to `false`.",
           "type": "boolean"
         },
         "binaryParts": {

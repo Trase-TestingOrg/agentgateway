@@ -2512,16 +2512,28 @@ impl AIProvider {
 			let prompt_guard_headers =
 				response_prompt_guard_headers(&parts.headers, rate_limit.request_traceparent.as_ref());
 
+			// A webhook with `includeBody` gets the call's usage and cost, priced before the guard
+			// runs from the same context the access log and the `llm.*` CEL variables read.
+			let webhook_usage = webhook_usage_for(
+				&rate_limit.prompt_guard,
+				&req,
+				resp.as_ref(),
+				log_content,
+				model_catalog,
+			);
+
 			// Apply response prompt guard
+			// Boxed: the guard's future is large and `process_response` has a size budget.
 			if req.input_format.supports_prompt_guard()
-				&& let Some(dr) = Policy::apply_response_prompt_guard(
+				&& let Some(dr) = Box::pin(Policy::apply_response_prompt_guard(
 					&client,
 					resp.as_mut(),
 					&prompt_guard_headers,
 					&rate_limit.prompt_guard,
 					req_snapshot.as_deref(),
 					Some(&guardrail_log),
-				)
+					webhook_usage,
+				))
 				.await
 				.map_err(|e| {
 					warn!("failed to apply response prompt guard: {e}");
@@ -2994,6 +3006,9 @@ impl AIProvider {
 			vec![]
 		};
 
+		// The streaming guards read the final usage from the same log when the stream ends.
+		let stream_usage =
+			policy::streaming_guardrails::StreamUsage::new(log.clone(), model_catalog.clone());
 		let logger = AmendOnDrop::new(log, response_policies, req_snapshot, model_catalog).into_llm();
 		let stream_format = match self {
 			AIProvider::Bedrock(_) => "awsEventStream",
@@ -3042,10 +3057,18 @@ impl AIProvider {
 
 		if !evaluators.is_empty() {
 			// `logger` is owned by the translated body; pass None to avoid double-logging.
-			return Ok(
-				translated
-					.map(|b| b.transform_stream(|b| GuardedSseBody::new(b, evaluators, buffer, None))),
-			);
+			return Ok(translated.map(|b| {
+				b.transform_stream(|b| {
+					GuardedSseBody::with_usage(
+						b,
+						evaluators,
+						buffer,
+						None,
+						policy::streaming_guardrails::DEFAULT_EVAL_THRESHOLD,
+						Some(stream_usage),
+					)
+				})
+			}));
 		}
 		Ok(translated)
 	}
@@ -3329,6 +3352,26 @@ fn map_response_compression_error(
 		http::compression::Error::Io(e) => AIError::ResponseDecoding(axum_core::Error::new(e)),
 		http::compression::Error::Body(e) => AIError::ResponseDecoding(e),
 	}
+}
+
+/// The usage and cost a response webhook with `includeBody` is given: the call priced from the
+/// catalog before the guard runs, from the same context the access log and the `llm.*` CEL
+/// variables read. `None` when no such webhook is configured.
+fn webhook_usage_for(
+	guards: &[policy::ResponseGuard],
+	req: &LLMRequest,
+	resp: &dyn ResponseType,
+	log_content: LogContentFields,
+	model_catalog: Option<&catalog::ModelCatalog>,
+) -> Option<serde_json::Value> {
+	let wanted = guards
+		.iter()
+		.any(|g| matches!(&g.kind, policy::ResponseGuardKind::Webhook(w) if w.include_body));
+	if !wanted {
+		return None;
+	}
+	let info = LLMInfo::new(req.clone(), resp.to_llm_response(log_content));
+	policy::usage_value(info, model_catalog)
 }
 
 fn response_prompt_guard_headers(
