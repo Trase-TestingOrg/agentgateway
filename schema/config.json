@@ -5349,6 +5349,14 @@
         "action": {
           "description": "Whether to enforce the webhook's verdict or only observe it.\nDefaults to `reject` (enforce).",
           "$ref": "#/$defs/RejectAuditAction"
+        },
+        "includeBody": {
+          "description": "Include the full parsed request (`request`, `normalized_messages`) or response (`response`)\nin the webhook payload. Windows of a streamed response never carry them.\nDefaults to `false`.",
+          "type": "boolean"
+        },
+        "binaryParts": {
+          "description": "With `includeBody`, how inline binary data (base64 images, audio, files) in `request` and\n`response` travels. Defaults to `inline`.",
+          "$ref": "#/$defs/WebhookBinaryParts"
         }
       },
       "additionalProperties": false,
@@ -5456,6 +5464,21 @@
           "description": "Observe mode: invoke the guard and record its verdict (metrics +\nstructured log) but never block or mask — the content always passes\nthrough.",
           "type": "string",
           "const": "audit"
+        }
+      ]
+    },
+    "WebhookBinaryParts": {
+      "description": "How inline binary data in `request` and `response` travels with `includeBody`.",
+      "oneOf": [
+        {
+          "description": "Send base64 images, audio and files as the client sent them (default).",
+          "type": "string",
+          "const": "inline"
+        },
+        {
+          "description": "Replace each data string with `omitted:<media type>;bytes=<decoded length>;sha256=<hex>`,\nso the payload stays small and a webhook that reads text never receives the bytes.",
+          "type": "string",
+          "const": "descriptor"
         }
       ]
     },
