@@ -77,6 +77,37 @@ pub struct GuardrailsResponseRequest {
 	/// response is the parsed response in the client's format; only with `includeBody`, never for a streamed window.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub response: Option<serde_json::Value>,
+	/// usage is the engine's usage and cost for the call: the numbers the access log's `llm` fields
+	/// come from, plus `costStatus` (the catalog lookup) and `usageReported` (whether the provider
+	/// reported usage; without it the tokens are absent and `cost.total` is 0). Only with
+	/// `includeBody`, on a buffered answer and on the last call of a streamed one.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub usage: Option<serde_json::Value>,
+	/// index is the call's position in its stream, from 0; only with `includeBody` on a streamed
+	/// answer. The last call has the highest index, so a stream made `index + 1` calls.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub index: Option<u32>,
+	/// stream names the stream a window belongs to; only with `includeBody` on a streamed answer.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub stream: Option<String>,
+	/// final marks the last call of a streamed answer. Normally it is the last window, evaluated
+	/// like any other while its frames are held, with its verdict applied, carrying `usage` and the
+	/// text it had (no choices when every piece was judged earlier). When the stream ends without
+	/// that window (the client aborted, a guard blocked an earlier window, or the client aborted
+	/// while the last window's call was in flight), one detached call with `final` and `usage` is
+	/// sent once at the same position, and its verdict is ignored. A receiver keys calls by the
+	/// decision id and `index`, so the in-flight case yields one record.
+	#[serde(default, rename = "final", skip_serializing_if = "Option::is_none")]
+	pub is_final: Option<bool>,
+}
+
+/// What a response call carries beyond its choices when `includeBody` is on.
+#[derive(Debug, Clone, Default)]
+pub(super) struct ResponseExtras {
+	pub usage: Option<serde_json::Value>,
+	pub index: Option<u32>,
+	pub stream: Option<&'static str>,
+	pub is_final: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -261,10 +292,15 @@ fn build_request_for_response(
 	http_headers: &HeaderMap,
 	choices: Vec<ResponseChoice>,
 	response: Option<serde_json::Value>,
+	extras: ResponseExtras,
 ) -> anyhow::Result<crate::http::Request> {
 	let body = GuardrailsResponseRequest {
 		body: ResponseChoices { choices },
 		response,
+		usage: extras.usage,
+		index: extras.index,
+		stream: extras.stream.map(str::to_string),
+		is_final: extras.is_final.then_some(true),
 	};
 	build_request(&body, RESPONSE_PATH, webhook, context, http_headers)
 }
@@ -373,6 +409,7 @@ pub(super) async fn send_response(
 	http_headers: &HeaderMap,
 	choices: Vec<ResponseChoice>,
 	response: Option<serde_json::Value>,
+	extras: ResponseExtras,
 ) -> anyhow::Result<GuardrailsResponseResponse> {
 	let whr = with_default_timeout(build_request_for_response(
 		webhook,
@@ -380,6 +417,7 @@ pub(super) async fn send_response(
 		http_headers,
 		choices,
 		response,
+		extras,
 	)?);
 	let res = client
 		.with_outbound(OutboundCallKind::Policy, OutboundCallSubtype::Guardrail)
@@ -391,6 +429,38 @@ pub(super) async fn send_response(
 		.await?;
 	let parsed = json::from_response_body(res).await?;
 	Ok(parsed)
+}
+
+/// Send the detached end-of-stream call for a stream whose last window did not report its end:
+/// `usage`, `final` and the call's position, no choices. It runs detached from the client stream
+/// with the webhook's own timeout, is sent once, and its verdict is ignored; a failure is logged.
+pub(super) fn spawn_final_response(
+	client: PolicyClient,
+	webhook: Webhook,
+	http_headers: HeaderMap,
+	original: Option<std::sync::Arc<RequestSnapshot>>,
+	extras: ResponseExtras,
+) {
+	let Ok(handle) = tokio::runtime::Handle::try_current() else {
+		tracing::warn!("webhook stream-end call skipped: no async runtime");
+		return;
+	};
+	handle.spawn(async move {
+		// Sent once: nothing waits for it, and a retry could deliver it twice.
+		if let Err(e) = send_response(
+			&client,
+			&webhook,
+			EvaluationContext::new(original.as_deref(), None),
+			&http_headers,
+			vec![],
+			None,
+			extras,
+		)
+		.await
+		{
+			tracing::warn!("webhook stream-end call failed: {e}");
+		}
+	});
 }
 
 #[cfg(test)]
@@ -464,6 +534,7 @@ mod tests {
 			&HeaderMap::new(),
 			vec![],
 			None,
+			ResponseExtras::default(),
 		)
 		.unwrap();
 		assert_eq!(resp.uri().path(), "/response");
@@ -765,6 +836,7 @@ mod tests {
 			&HeaderMap::new(),
 			choices,
 			None,
+			ResponseExtras::default(),
 		)
 		.unwrap();
 		assert_eq!(
@@ -799,6 +871,7 @@ mod tests {
 			&HeaderMap::new(),
 			vec![],
 			Some(serde_json::json!({"usage": {"total_tokens": 3}})),
+			ResponseExtras::default(),
 		)
 		.unwrap();
 		assert_eq!(
@@ -1035,6 +1108,7 @@ mod tests {
 			&client,
 			&wh,
 			None,
+			&ResponseExtras::default(),
 		)
 		.await
 		.expect("webhook reachable");
@@ -1048,6 +1122,7 @@ mod tests {
 			&client,
 			&wh,
 			None,
+			&ResponseExtras::default(),
 		)
 		.await
 		.expect("webhook reachable");
@@ -1071,5 +1146,208 @@ mod tests {
 			streamed["body"]["choices"][0]["message"]["content"],
 			"a window of text"
 		);
+	}
+
+	#[tokio::test]
+	async fn response_extras_are_dropped_without_include_body() {
+		let wh = webhook(vec![]);
+		let choices = vec![ResponseChoice {
+			message: Message {
+				role: "assistant".into(),
+				content: "hi".into(),
+			},
+		}];
+		let extras = ResponseExtras {
+			usage: Some(serde_json::json!({"outputTokens": 5})),
+			index: Some(3),
+			stream: Some("text"),
+			is_final: true,
+		};
+		// The extras are applied by the caller only with includeBody; the builder itself writes
+		// whatever it is given, so the "off" path is the caller passing the default.
+		let on = build_request_for_response(
+			&wh,
+			EvaluationContext::new(None, None),
+			&HeaderMap::new(),
+			choices.clone(),
+			None,
+			extras,
+		)
+		.unwrap();
+		let off = build_request_for_response(
+			&wh,
+			EvaluationContext::new(None, None),
+			&HeaderMap::new(),
+			choices,
+			None,
+			ResponseExtras::default(),
+		)
+		.unwrap();
+		let on = body_json(on).await;
+		let off = body_json(off).await;
+		assert_eq!(on["usage"]["outputTokens"], 5);
+		assert_eq!(on["index"], 3);
+		assert_eq!(on["stream"], "text");
+		assert_eq!(on["final"], true);
+		assert_eq!(
+			off,
+			serde_json::json!({"body": {"choices": [{"message": {"role": "assistant", "content": "hi"}}]}})
+		);
+	}
+
+	#[tokio::test]
+	async fn include_body_adds_usage_to_a_buffered_response_and_index_to_a_window() {
+		use wiremock::matchers::{method, path};
+		use wiremock::{Mock, MockServer, ResponseTemplate};
+
+		use crate::types::agent::Target;
+
+		let server = MockServer::start().await;
+		Mock::given(method("POST"))
+			.and(path("/response"))
+			.respond_with(
+				ResponseTemplate::new(200).set_body_json(serde_json::json!({"action": {"reason": "ok"}})),
+			)
+			.mount(&server)
+			.await;
+		let client = crate::test_helpers::policy_client();
+		let mut wh = webhook(vec![]);
+		wh.target = SimpleBackendReferenceWithPolicies {
+			target: Arc::new(SimpleBackendReference::InlineBackend(Target::Address(
+				*server.address(),
+			))),
+			policies: vec![],
+		};
+		wh.include_body = true;
+
+		let mut resp: crate::llm::types::completions::Response = serde_json::from_value(serde_json::json!({
+			"id": "chatcmpl-1", "object": "chat.completion", "created": 1, "model": "gpt-4o-2024-08-06",
+			"choices": [{"index": 0, "finish_reason": "stop", "message": {"role": "assistant", "content": "ok"}}],
+			"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+		}))
+		.unwrap();
+		let usage =
+			serde_json::json!({"inputTokens": 10, "outputTokens": 5, "cost": {"total": 0.000125}});
+		super::super::Policy::evaluate_webhook_response(
+			&mut resp,
+			&HeaderMap::new(),
+			&client,
+			&wh,
+			None,
+			&ResponseExtras {
+				usage: Some(usage.clone()),
+				..Default::default()
+			},
+		)
+		.await
+		.expect("webhook reachable");
+
+		let mut window = super::super::TextResponse {
+			content: "a window of text".to_string(),
+		};
+		super::super::Policy::evaluate_webhook_response(
+			&mut window,
+			&HeaderMap::new(),
+			&client,
+			&wh,
+			None,
+			&ResponseExtras {
+				index: Some(2),
+				stream: Some("text"),
+				..Default::default()
+			},
+		)
+		.await
+		.expect("webhook reachable");
+
+		// Flag off: the same extras never reach the payload.
+		wh.include_body = false;
+		super::super::Policy::evaluate_webhook_response(
+			&mut window,
+			&HeaderMap::new(),
+			&client,
+			&wh,
+			None,
+			&ResponseExtras {
+				usage: Some(usage.clone()),
+				index: Some(2),
+				stream: Some("text"),
+				..Default::default()
+			},
+		)
+		.await
+		.expect("webhook reachable");
+
+		let received = server.received_requests().await.unwrap();
+		assert_eq!(received.len(), 3);
+		let buffered: serde_json::Value = received[0].body_json().unwrap();
+		assert_eq!(buffered["usage"], usage);
+		assert_eq!(buffered["response"]["model"], "gpt-4o-2024-08-06");
+		assert!(buffered.get("index").is_none());
+		let windowed: serde_json::Value = received[1].body_json().unwrap();
+		assert_eq!(windowed["index"], 2);
+		assert_eq!(windowed["stream"], "text");
+		assert!(windowed.get("usage").is_none());
+		assert!(windowed.get("response").is_none());
+		let off: serde_json::Value = received[2].body_json().unwrap();
+		assert_eq!(
+			off,
+			serde_json::json!({"body": {"choices": [{"message": {"role": "assistant", "content": "a window of text"}}]}})
+		);
+	}
+
+	#[tokio::test]
+	async fn the_stream_end_call_carries_usage_and_the_window_count_and_no_choices() {
+		use wiremock::matchers::{method, path};
+		use wiremock::{Mock, MockServer, ResponseTemplate};
+
+		use crate::types::agent::Target;
+
+		let server = MockServer::start().await;
+		Mock::given(method("POST"))
+			.and(path("/response"))
+			.respond_with(
+				ResponseTemplate::new(200).set_body_json(serde_json::json!({"action": {"reason": "ok"}})),
+			)
+			.mount(&server)
+			.await;
+		let client = crate::test_helpers::policy_client();
+		let mut wh = webhook(vec![]);
+		wh.target = SimpleBackendReferenceWithPolicies {
+			target: Arc::new(SimpleBackendReference::InlineBackend(Target::Address(
+				*server.address(),
+			))),
+			policies: vec![],
+		};
+		wh.include_body = true;
+
+		let usage = serde_json::json!({"inputTokens": 25, "outputTokens": 400, "costStatus": "exact"});
+		spawn_final_response(
+			client,
+			wh,
+			HeaderMap::new(),
+			None,
+			ResponseExtras {
+				usage: Some(usage.clone()),
+				index: Some(4),
+				stream: Some("text"),
+				is_final: true,
+			},
+		);
+		for _ in 0..50 {
+			if !server.received_requests().await.unwrap().is_empty() {
+				break;
+			}
+			tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+		}
+		let received = server.received_requests().await.unwrap();
+		assert_eq!(received.len(), 1, "one stream-end call");
+		let body: serde_json::Value = received[0].body_json().unwrap();
+		assert_eq!(body["final"], true);
+		assert_eq!(body["index"], 4);
+		assert_eq!(body["stream"], "text");
+		assert_eq!(body["usage"], usage);
+		assert_eq!(body["body"]["choices"], serde_json::json!([]));
+		assert!(body.get("response").is_none());
 	}
 }

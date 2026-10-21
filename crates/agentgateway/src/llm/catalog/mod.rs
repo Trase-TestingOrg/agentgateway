@@ -688,7 +688,7 @@ pub enum CostLookupStatus {
 	NoCatalog,
 }
 
-fn status_name(status: CostLookupStatus) -> &'static str {
+pub(crate) fn status_name(status: CostLookupStatus) -> &'static str {
 	match status {
 		CostLookupStatus::Exact => "exact",
 		CostLookupStatus::Unpriced => "unpriced",

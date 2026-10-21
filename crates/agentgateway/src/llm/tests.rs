@@ -79,6 +79,51 @@ fn llm_request_with_tokens(input_tokens: Option<u64>) -> LLMRequest {
 }
 
 #[test]
+fn webhook_usage_carries_the_cost_status_and_no_captured_text() {
+	let catalog = crate::llm::catalog::ModelCatalog::from_json(
+		r#"{"providers":{"openai":{"models":{"my-model":{"rates":{"input":"1","output":"2"}}}}}}"#,
+	);
+	let info = |model: &str, tokens: Option<u64>| LLMInfo {
+		request: LLMRequest {
+			request_model: model.into(),
+			provider: "openai".into(),
+			..llm_request_with_tokens(None)
+		},
+		response: LLMResponse {
+			input_tokens: tokens,
+			output_tokens: tokens.map(|_| 0),
+			completion: Some(vec!["captured answer".to_string()]),
+			..Default::default()
+		},
+	};
+
+	let priced = policy::usage_value(info("my-model", Some(1_000_000)), Some(&catalog)).unwrap();
+	assert_eq!(priced["costStatus"], json!("exact"));
+	assert_eq!(priced["usageReported"], json!(true));
+	assert_eq!(priced["inputTokens"], json!(1_000_000));
+	assert_eq!(priced["cost"]["total"], json!(1.0));
+	for text in ["prompt", "completion", "toolCalls"] {
+		assert!(priced[text].is_null(), "{text} must not reach the webhook");
+	}
+
+	// A known model whose provider sent no usage still serializes a zero total; the status is
+	// what lets the receiver tell it from a free call.
+	let no_usage = policy::usage_value(info("my-model", None), Some(&catalog)).unwrap();
+	assert_eq!(no_usage["costStatus"], json!("exact"));
+	assert_eq!(no_usage["usageReported"], json!(false));
+	assert!(no_usage["outputTokens"].is_null());
+	assert_eq!(no_usage["cost"]["total"], json!(0.0));
+
+	let unknown = policy::usage_value(info("not-in-catalog", Some(10)), Some(&catalog)).unwrap();
+	assert_eq!(unknown["costStatus"], json!("missing"));
+	assert!(unknown["cost"].is_null());
+
+	let no_catalog = policy::usage_value(info("my-model", Some(10)), None).unwrap();
+	assert_eq!(no_catalog["costStatus"], json!("noCatalog"));
+	assert!(no_catalog["cost"].is_null());
+}
+
+#[test]
 fn vertex_gemini_uses_native_completions_and_compat_fallbacks() {
 	let provider = AIProvider::Vertex(vertex::Provider {
 		project_id: strng::new("test-project"),

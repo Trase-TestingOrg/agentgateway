@@ -104,6 +104,7 @@ async fn audit_mode_records_allow_when_nothing_matches() {
 		None,
 		None,
 		Some(&mut false),
+		&webhook::ResponseExtras::default(),
 	)
 	.await
 	.unwrap();
@@ -147,6 +148,7 @@ async fn audit_mode_records_audit_and_passes_through_on_match() {
 		None,
 		None,
 		Some(&mut false),
+		&webhook::ResponseExtras::default(),
 	)
 	.await
 	.unwrap();

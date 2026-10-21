@@ -430,10 +430,78 @@ enum ResponseGuardMutation {
 ///
 /// The trait is object-safe and `Send` so it can be boxed and driven from the
 /// `GuardedSseBody` future.
+/// A window's position in its stream and, on the last window, what the engine knows at the end.
+#[derive(Debug, Clone, Default)]
+pub struct WindowMeta {
+	pub index: u32,
+	pub stream: &'static str,
+	/// The stream ends with this window. Its frames are still held while it is evaluated, so a
+	/// webhook with `includeBody` gets `final` and `usage` synchronously, exactly once.
+	pub is_final: bool,
+	pub usage: Option<serde_json::Value>,
+}
+
+/// Called once when a stream ends, with what is known then.
+pub type StreamFinisher = std::sync::Arc<dyn Fn(StreamSummary) + Send + Sync>;
+
+/// The engine's usage and cost for a call as a webhook payload value: the same context the
+/// access log and the `llm.*` CEL variables read, plus the catalog's `costStatus`, without the
+/// prompt, completion and tool-call text that logging may have captured, since a guard earlier in
+/// the chain may have masked them.
+pub(crate) fn usage_value(
+	info: agent_llm::LLMInfo,
+	catalog: Option<&crate::llm::catalog::ModelCatalog>,
+) -> Option<serde_json::Value> {
+	let mut ctx = crate::cel::LLMContext::from_llm_info(info, catalog);
+	ctx.prompt = None;
+	ctx.completion = None;
+	ctx.tool_calls = None;
+	// The catalog's lookup status is not serialized for the log, so a known model with no usage
+	// and an unpriced model both read as "no cost" there. The receiver needs the status to tell a
+	// genuine zero from an unknown.
+	// Without a catalog the context has no status at all; the receiver still needs a word for it.
+	let status = ctx
+		.cost_status
+		.map(crate::llm::catalog::status_name)
+		.unwrap_or("noCatalog");
+	// The status describes the catalog lookup, not whether the provider sent usage: a known model
+	// with no usage prices to a zero total with status `exact`. Say so explicitly.
+	let usage_reported = ctx.output_tokens.is_some();
+	let mut value = serde_json::to_value(ctx).ok()?;
+	if let Some(object) = value.as_object_mut() {
+		object.insert("costStatus".to_string(), status.into());
+		object.insert("usageReported".to_string(), usage_reported.into());
+	}
+	Some(value)
+}
+
+/// What is known when a stream ends: how many windows it had and the engine's usage and cost.
+#[derive(Debug, Clone)]
+pub struct StreamSummary {
+	pub windows: u32,
+	pub stream: &'static str,
+	pub usage: Option<serde_json::Value>,
+}
+
 #[async_trait::async_trait]
 pub trait StreamingEvaluator: Send {
 	/// Evaluate a text window. Returns `Some(Blocked)` if the content should be blocked.
 	async fn evaluate(&mut self, window: &str) -> anyhow::Result<Option<StreamingGuardrailOutcome>>;
+
+	/// Evaluate a text window knowing its position in the stream. The default ignores the position.
+	async fn evaluate_window(
+		&mut self,
+		window: &str,
+		_meta: WindowMeta,
+	) -> anyhow::Result<Option<StreamingGuardrailOutcome>> {
+		self.evaluate(window).await
+	}
+
+	/// Something to call when the stream ends, captured once so it survives the evaluators being
+	/// moved into an evaluation future. The default has nothing to call.
+	fn stream_finisher(&self) -> Option<StreamFinisher> {
+		None
+	}
 
 	/// Returns the failure mode to apply when `evaluate` returns an error.
 	/// Guard types without an explicit `failure_mode` field default to `FailClosed`.
@@ -461,6 +529,11 @@ impl crate::llm::ResponseType for TextResponse {
 	}
 
 	fn to_webhook_choices(&self) -> Vec<webhook::ResponseChoice> {
+		// The stream's last window may carry no text at all (a tool-call-only stream, or text that
+		// was all evaluated at a frame boundary); the end-of-stream call then has no choices.
+		if self.content.is_empty() {
+			return vec![];
+		}
 		vec![webhook::ResponseChoice {
 			message: crate::llm::SimpleChatCompletionMessage {
 				role: "assistant".into(),
@@ -655,12 +728,20 @@ impl PromptGuard {
 		original: Option<&cel::RequestSnapshot>,
 		guardrail_log: Option<&GuardrailLog>,
 		allow_recorded: &mut bool,
+		meta: Option<WindowMeta>,
 	) -> anyhow::Result<(Option<StreamingGuardrailOutcome>, GuardrailAction)> {
-		if window.is_empty() {
+		let is_final = meta.as_ref().is_some_and(|m| m.is_final);
+		if window.is_empty() && !is_final {
 			return Ok((None, GuardrailAction::Allow));
 		}
 		let mut resp = TextResponse {
 			content: window.to_string(),
+		};
+		let extras = webhook::ResponseExtras {
+			index: meta.as_ref().map(|m| m.index),
+			stream: meta.as_ref().map(|m| m.stream),
+			usage: meta.as_ref().and_then(|m| m.usage.clone()),
+			is_final,
 		};
 		let (action, rejection) = Policy::apply_single_response_guard(
 			guard,
@@ -670,6 +751,7 @@ impl PromptGuard {
 			original,
 			guardrail_log,
 			Some(allow_recorded),
+			&extras,
 		)
 		.await?;
 		let streaming = match rejection {
@@ -1641,18 +1723,19 @@ impl Policy {
 		client: &PolicyClient,
 		webhook: &Webhook,
 		original: Option<&cel::RequestSnapshot>,
+		extras: &webhook::ResponseExtras,
 	) -> anyhow::Result<(GuardrailOutcome<ResponseGuardMutation>, Option<GuardDetail>)> {
 		let messages = resp.to_webhook_choices();
-		let response = if webhook.include_body {
+		let (response, extras) = if webhook.include_body {
 			let mut response = resp.to_value()?;
 			if webhook.binary_parts == BinaryParts::Descriptor
 				&& let Some(response) = response.as_mut()
 			{
 				webhook::describe_binary_parts(response);
 			}
-			response
+			(response, extras.clone())
 		} else {
-			None
+			(None, webhook::ResponseExtras::default())
 		};
 		let headers = Self::get_webhook_forward_headers(http_headers, &webhook.forward_header_matches);
 		let whr = webhook::send_response(
@@ -1662,6 +1745,7 @@ impl Policy {
 			&headers,
 			messages,
 			response,
+			extras,
 		)
 		.await?;
 		if webhook.action == RejectAuditAction::Audit {
@@ -1890,7 +1974,12 @@ impl Policy {
 		guards: &Vec<ResponseGuard>,
 		original: Option<&cel::RequestSnapshot>,
 		guardrail_log: Option<&GuardrailLog>,
+		usage: Option<serde_json::Value>,
 	) -> anyhow::Result<Option<Response>> {
+		let extras = webhook::ResponseExtras {
+			usage,
+			..Default::default()
+		};
 		for g in guards {
 			let (action, rejection) = Self::apply_single_response_guard(
 				g,
@@ -1900,6 +1989,7 @@ impl Policy {
 				original,
 				guardrail_log,
 				None,
+				&extras,
 			)
 			.await?;
 			Self::record_guardrail_trip(client, GuardrailPhase::Response, action);
@@ -1919,19 +2009,26 @@ impl Policy {
 		original: Option<&cel::RequestSnapshot>,
 		guardrail_log: Option<&GuardrailLog>,
 		streaming_allow_recorded: Option<&mut bool>,
+		extras: &webhook::ResponseExtras,
 	) -> anyhow::Result<(GuardrailAction, Option<Response>)> {
-		let (outcome, detail) =
-			match Self::evaluate_single_response_guard(guard, resp, http_headers, client, original).await
+		let (outcome, detail) = match Self::evaluate_single_response_guard(
+			guard,
+			resp,
+			http_headers,
+			client,
+			original,
+			extras,
+		)
+		.await
+		{
+			Err(e)
+				if streaming_allow_recorded.is_none() && guard.failure_mode() == FailureMode::FailOpen =>
 			{
-				Err(e)
-					if streaming_allow_recorded.is_none()
-						&& guard.failure_mode() == FailureMode::FailOpen =>
-				{
-					tracing::warn!("response guard error, failing open: {e}");
-					(GuardrailOutcome::FailOpen, None)
-				},
-				result => result?,
-			};
+				tracing::warn!("response guard error, failing open: {e}");
+				(GuardrailOutcome::FailOpen, None)
+			},
+			result => result?,
+		};
 
 		if streaming_allow_recorded.is_some() && matches!(outcome, GuardrailOutcome::Masked(_)) {
 			// Streaming cannot apply masking; do not report this as a passed check.
@@ -1961,6 +2058,7 @@ impl Policy {
 		http_headers: &HeaderMap,
 		client: &PolicyClient,
 		original: Option<&cel::RequestSnapshot>,
+		extras: &webhook::ResponseExtras,
 	) -> anyhow::Result<(GuardrailOutcome<ResponseGuardMutation>, Option<GuardDetail>)> {
 		match &guard.kind {
 			ResponseGuardKind::Regex(rg) => Ok((
@@ -1968,7 +2066,7 @@ impl Policy {
 				None,
 			)),
 			ResponseGuardKind::Webhook(wh) => {
-				Self::evaluate_webhook_response(resp, http_headers, client, wh, original).await
+				Self::evaluate_webhook_response(resp, http_headers, client, wh, original, extras).await
 			},
 			ResponseGuardKind::BedrockGuardrails(bg) => {
 				Self::evaluate_bedrock_guardrails_response(resp, None, client, bg, &guard.rejection).await
@@ -2221,7 +2319,8 @@ pub struct Webhook {
 	#[serde(default, skip_serializing_if = "crate::serdes::is_default")]
 	pub action: RejectAuditAction,
 	/// Include the full parsed request (`request`, `normalized_messages`) or response (`response`)
-	/// in the webhook payload. Windows of a streamed response never carry them.
+	/// in the webhook payload, and `usage` on a buffered response. Windows of a streamed response
+	/// carry `index` and `stream` instead, and the last one carries `final` and `usage`.
 	/// Defaults to `false`.
 	#[serde(default, skip_serializing_if = "crate::serdes::is_default")]
 	pub include_body: bool,

@@ -31,7 +31,10 @@ use tokio_sse_codec::{Event, Frame as SseFrame, SseDecoder};
 use tokio_util::codec::Decoder;
 use tracing::warn;
 
-use super::{FailureMode, ResponseGuard, StreamingEvaluator, StreamingGuardrailOutcome};
+use super::{
+	FailureMode, ResponseGuard, ResponseGuardKind, StreamFinisher, StreamSummary, StreamingEvaluator,
+	StreamingGuardrailOutcome, WindowMeta,
+};
 use crate::cel::RequestSnapshot;
 use crate::llm::policy::{Policy, PromptGuard};
 use crate::proxy::httpproxy::PolicyClient;
@@ -64,8 +67,17 @@ pub async fn evaluate_window(
 	evaluators: &mut [Box<dyn StreamingEvaluator>],
 	window: &str,
 ) -> Option<Bytes> {
+	evaluate_window_at(evaluators, window, WindowMeta::default()).await
+}
+
+/// Run all evaluators against a window at a known position in the stream.
+pub async fn evaluate_window_at(
+	evaluators: &mut [Box<dyn StreamingEvaluator>],
+	window: &str,
+	meta: WindowMeta,
+) -> Option<Bytes> {
 	for ev in evaluators.iter_mut() {
-		match ev.evaluate(window).await {
+		match ev.evaluate_window(window, meta.clone()).await {
 			Ok(Some(StreamingGuardrailOutcome::Blocked(body))) => {
 				tracing::debug!("streaming guardrail blocked response window");
 				return Some(body);
@@ -83,6 +95,55 @@ pub async fn evaluate_window(
 		}
 	}
 	None
+}
+
+/// The engine's usage for a streamed answer, read when the stream ends and priced with the catalog.
+pub struct StreamUsage {
+	log: crate::telemetry::log::AsyncLog<agent_llm::LLMInfo>,
+	catalog: Option<Arc<crate::llm::catalog::ModelCatalog>>,
+}
+
+impl StreamUsage {
+	pub fn new(
+		log: crate::telemetry::log::AsyncLog<agent_llm::LLMInfo>,
+		catalog: Option<Arc<crate::llm::catalog::ModelCatalog>>,
+	) -> Self {
+		Self { log, catalog }
+	}
+
+	/// The usage and cost as the engine has them now; absent when nothing was logged.
+	fn context(&self) -> Option<serde_json::Value> {
+		let mut ctx = None;
+		self.log.non_atomic_mutate(|info| {
+			ctx = super::usage_value(info.clone(), self.catalog.as_deref());
+		});
+		ctx
+	}
+}
+
+/// Run the stream finishers once, for a stream whose end was not reported by its last window: a
+/// client abort (including one while that window's call is in flight), or a guard block on an
+/// earlier window. They were captured at construction, so this works whether the evaluators are
+/// at rest or moved into an evaluation future at the moment the body ends. `windows` is the
+/// position the call takes in the stream: the index the last window had, or the next index when
+/// no last window was started, so a receiver keys every call by its position.
+fn finish_stream(
+	finishers: &[StreamFinisher],
+	usage: Option<&StreamUsage>,
+	windows: u32,
+	finished: &mut bool,
+) {
+	if std::mem::replace(finished, true) || finishers.is_empty() {
+		return;
+	}
+	let usage = usage.and_then(StreamUsage::context);
+	for finisher in finishers {
+		finisher(StreamSummary {
+			windows,
+			stream: "text",
+			usage: usage.clone(),
+		});
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +168,7 @@ pub fn make_evaluator(
 		audit_recorded: false,
 		allow_recorded: false,
 		fail_open_recorded: false,
+		window_meta: None,
 	})
 }
 
@@ -123,11 +185,19 @@ struct ResponseGuardEvaluator {
 	// Deduplicate passing windows
 	allow_recorded: bool,
 	fail_open_recorded: bool,
+	// The position of the window being evaluated, set by `evaluate_window` for `evaluate`.
+	window_meta: Option<WindowMeta>,
 }
 
 impl ResponseGuardEvaluator {
 	fn observe_action(&mut self, action: GuardrailAction) {
 		self.worst_action = self.worst_action.max(action);
+	}
+
+	/// Only a webhook with `includeBody` wants the stream's end; the other guard kinds have nothing
+	/// to do with usage.
+	fn wants_stream_end(&self) -> bool {
+		matches!(&self.guard.kind, ResponseGuardKind::Webhook(wh) if wh.include_body)
 	}
 }
 
@@ -141,6 +211,48 @@ impl Drop for ResponseGuardEvaluator {
 impl StreamingEvaluator for ResponseGuardEvaluator {
 	fn failure_mode(&self) -> FailureMode {
 		self.guard.failure_mode()
+	}
+
+	async fn evaluate_window(
+		&mut self,
+		window: &str,
+		meta: WindowMeta,
+	) -> anyhow::Result<Option<StreamingGuardrailOutcome>> {
+		// An empty last window exists only for the end-of-stream call.
+		if window.is_empty() && !(meta.is_final && self.wants_stream_end()) {
+			return Ok(None);
+		}
+		self.window_meta = Some(meta);
+		self.evaluate(window).await
+	}
+
+	fn stream_finisher(&self) -> Option<StreamFinisher> {
+		if !self.wants_stream_end() {
+			return None;
+		}
+		let ResponseGuardKind::Webhook(wh) = &self.guard.kind else {
+			return None;
+		};
+		let (client, wh, headers, original) = (
+			self.client.clone(),
+			wh.clone(),
+			self.http_headers.clone(),
+			self.original.clone(),
+		);
+		Some(Arc::new(move |summary: StreamSummary| {
+			super::webhook::spawn_final_response(
+				client.clone(),
+				wh.clone(),
+				headers.clone(),
+				original.clone(),
+				super::webhook::ResponseExtras {
+					usage: summary.usage,
+					index: Some(summary.windows),
+					stream: Some(summary.stream),
+					is_final: true,
+				},
+			);
+		}))
 	}
 
 	async fn evaluate(&mut self, window: &str) -> anyhow::Result<Option<StreamingGuardrailOutcome>> {
@@ -158,6 +270,7 @@ impl StreamingEvaluator for ResponseGuardEvaluator {
 			self.original.as_deref(),
 			log,
 			&mut self.allow_recorded,
+			self.window_meta.take(),
 		)
 		.await
 		{
@@ -245,6 +358,26 @@ pin_project! {
 		// Owns the rate-limit logger; dropped only when this body is fully consumed,
 		// so telemetry is recorded at the correct time.
 		logger: Option<crate::llm::AmendOnDrop>,
+		// Windows evaluated so far; the next window's index.
+		window_index: u32,
+		// Where to read the usage from when the stream ends, for the finishers.
+		usage: Option<StreamUsage>,
+		// What to call when the stream ends, captured from the evaluators at construction.
+		finishers: Vec<StreamFinisher>,
+		// `finish` has run, on completion or on drop.
+		finished: bool,
+	}
+
+	impl PinnedDrop for GuardedSseBody {
+		fn drop(this: Pin<&mut Self>) {
+			let this = this.project();
+			finish_stream(
+				this.finishers,
+				this.usage.as_ref(),
+				*this.window_index,
+				this.finished,
+			);
+		}
 	}
 }
 
@@ -280,6 +413,34 @@ impl GuardedSseBody {
 		logger: Option<crate::llm::AmendOnDrop>,
 		eval_threshold: usize,
 	) -> agent_http::RawBody {
+		Self::with_usage(
+			inner,
+			evaluators,
+			buffer_limit,
+			logger,
+			eval_threshold,
+			None,
+		)
+	}
+
+	/// Like [`GuardedSseBody::with_threshold`], reading the engine's usage for this stream when it
+	/// ends, for the evaluators' `finish`.
+	pub fn with_usage(
+		inner: agent_http::RawBody,
+		evaluators: Vec<Box<dyn StreamingEvaluator>>,
+		buffer_limit: usize,
+		logger: Option<crate::llm::AmendOnDrop>,
+		eval_threshold: usize,
+		usage: Option<StreamUsage>,
+	) -> agent_http::RawBody {
+		let finishers = if usage.is_some() {
+			evaluators
+				.iter()
+				.filter_map(|ev| ev.stream_finisher())
+				.collect()
+		} else {
+			Vec::new()
+		};
 		agent_http::RawBody::new(Self {
 			inner,
 			evaluators,
@@ -293,6 +454,10 @@ impl GuardedSseBody {
 			decode_buffer: bytes::BytesMut::new(),
 			state: GuardedBodyState::Buffering,
 			logger,
+			window_index: 0,
+			usage,
+			finishers,
+			finished: false,
 		})
 	}
 
@@ -376,6 +541,12 @@ impl http_body::Body for GuardedSseBody {
 						return Poll::Ready(Some(Ok(Frame::data(frame))));
 					} else if *eof {
 						*this.state = GuardedBodyState::Done;
+						finish_stream(
+							this.finishers,
+							this.usage.as_ref(),
+							*this.window_index,
+							this.finished,
+						);
 						return Poll::Ready(None);
 					} else {
 						*this.state = GuardedBodyState::Buffering;
@@ -387,6 +558,12 @@ impl http_body::Body for GuardedSseBody {
 				GuardedBodyState::Blocked(body) => {
 					let body = std::mem::take(body);
 					*this.state = GuardedBodyState::Done;
+					finish_stream(
+						this.finishers,
+						this.usage.as_ref(),
+						*this.window_index,
+						this.finished,
+					);
 					return Poll::Ready(Some(Ok(Frame::data(guardrail_blocked_sse_bytes(body)))));
 				},
 				// -----------------------------------------------------------------
@@ -402,6 +579,11 @@ impl http_body::Body for GuardedSseBody {
 					Poll::Pending => return Poll::Pending,
 					Poll::Ready((evaluators, blocked_body)) => {
 						*this.evaluators = evaluators;
+						if *eof {
+							// The last window's call completed, allowed or blocked: the end is reported
+							// and the drop and flush paths must not report it again.
+							*this.finished = true;
+						}
 						if let Some(body) = blocked_body {
 							this.held_frames.clear();
 							*this.held_bytes = 0;
@@ -464,8 +646,14 @@ impl http_body::Body for GuardedSseBody {
 								let window = format!("{}{}", this.overlap_tail, batch);
 								*this.overlap_tail = tail_chars(&window, OVERLAP_BYTES).to_string();
 								let mut evaluators = std::mem::take(this.evaluators);
+								let meta = WindowMeta {
+									index: *this.window_index,
+									stream: "text",
+									..Default::default()
+								};
+								*this.window_index += 1;
 								let fut: EvalFuture = Box::pin(async move {
-									let blocked_body = evaluate_window(&mut evaluators, &window).await;
+									let blocked_body = evaluate_window_at(&mut evaluators, &window, meta).await;
 									(evaluators, blocked_body)
 								});
 								*this.state = GuardedBodyState::Evaluating { fut, eof: false };
@@ -488,7 +676,10 @@ impl http_body::Body for GuardedSseBody {
 								}
 							}
 
-							if this.pending_text.is_empty() {
+							// The last window is evaluated while its frames are still held, so a webhook
+							// that wants the stream's end gets it synchronously, with the usage the engine
+							// has parsed by now. Without such a webhook an empty tail is released as before.
+							if this.pending_text.is_empty() && this.finishers.is_empty() {
 								let queue: VecDeque<Bytes> = this.held_frames.drain(..).collect();
 								*this.held_bytes = 0;
 								*this.state = GuardedBodyState::Flushing { queue, eof: true };
@@ -496,11 +687,29 @@ impl http_body::Body for GuardedSseBody {
 							}
 
 							let batch = std::mem::take(this.pending_text);
-							let window = format!("{}{}", this.overlap_tail, batch);
+							// No pending text means no window to judge: the last call carries nothing,
+							// never the overlap of text the client already has.
+							let window = if batch.is_empty() {
+								String::new()
+							} else {
+								format!("{}{}", this.overlap_tail, batch)
+							};
 							this.overlap_tail.clear();
 							let mut evaluators = std::mem::take(this.evaluators);
+							let usage = (!this.finishers.is_empty())
+								.then(|| this.usage.as_ref().and_then(StreamUsage::context))
+								.flatten();
+							// The last window keeps `window_index` as its position: if the client drops
+							// the body while its call is in flight, the drop path reports the end at the
+							// same index, and the receiver can treat the two as one.
+							let meta = WindowMeta {
+								index: *this.window_index,
+								stream: "text",
+								is_final: true,
+								usage,
+							};
 							let fut: EvalFuture = Box::pin(async move {
-								let blocked_body = evaluate_window(&mut evaluators, &window).await;
+								let blocked_body = evaluate_window_at(&mut evaluators, &window, meta).await;
 								(evaluators, blocked_body)
 							});
 							*this.state = GuardedBodyState::Evaluating { fut, eof: true };
@@ -602,6 +811,228 @@ mod tests {
 
 	fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 		haystack.windows(needle.len()).any(|w| w == needle)
+	}
+
+	/// Records every window it is handed, and the position of each detached stream-end call.
+	/// `on_final` decides what the last window does: pass, block, or never answer.
+	struct RecordingEvaluator {
+		seen: Seen,
+		ended: Ended,
+		on_final: OnFinal,
+	}
+
+	#[derive(Clone, Copy)]
+	enum OnFinal {
+		Pass,
+		Block,
+		Hang,
+	}
+
+	#[async_trait::async_trait]
+	impl StreamingEvaluator for RecordingEvaluator {
+		async fn evaluate(
+			&mut self,
+			_window: &str,
+		) -> anyhow::Result<Option<StreamingGuardrailOutcome>> {
+			Ok(None)
+		}
+
+		async fn evaluate_window(
+			&mut self,
+			window: &str,
+			meta: WindowMeta,
+		) -> anyhow::Result<Option<StreamingGuardrailOutcome>> {
+			let is_final = meta.is_final;
+			self.seen.lock().unwrap().push((window.to_string(), meta));
+			match self.on_final {
+				OnFinal::Block if is_final => Ok(Some(StreamingGuardrailOutcome::Blocked(
+					Bytes::from_static(b"blocked at the end"),
+				))),
+				OnFinal::Hang if is_final => futures_util::future::pending().await,
+				_ => Ok(None),
+			}
+		}
+
+		fn stream_finisher(&self) -> Option<StreamFinisher> {
+			let ended = self.ended.clone();
+			Some(Arc::new(move |summary: StreamSummary| {
+				ended.lock().unwrap().push(summary.windows);
+			}))
+		}
+	}
+
+	type Seen = Arc<std::sync::Mutex<Vec<(String, WindowMeta)>>>;
+	type Ended = Arc<std::sync::Mutex<Vec<u32>>>;
+
+	fn recording() -> (Box<dyn StreamingEvaluator>, Seen, Ended) {
+		recording_with(OnFinal::Pass)
+	}
+
+	fn recording_with(on_final: OnFinal) -> (Box<dyn StreamingEvaluator>, Seen, Ended) {
+		let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+		let ended = Arc::new(std::sync::Mutex::new(Vec::new()));
+		let evaluator = RecordingEvaluator {
+			seen: seen.clone(),
+			ended: ended.clone(),
+			on_final,
+		};
+		(Box::new(evaluator), seen, ended)
+	}
+
+	fn guarded_with_usage(
+		body: agent_http::RawBody,
+		evaluator: Box<dyn StreamingEvaluator>,
+	) -> agent_http::RawBody {
+		GuardedSseBody::with_usage(
+			body,
+			vec![evaluator],
+			1024 * 1024,
+			None,
+			DEFAULT_EVAL_THRESHOLD,
+			Some(stream_usage()),
+		)
+	}
+
+	/// When the last text frame itself crossed the threshold, nothing is pending at the end: the
+	/// final window is empty, not the overlap of text the client already has.
+	#[tokio::test]
+	async fn the_final_window_is_empty_when_the_last_text_was_already_judged() {
+		let (evaluator, seen, ended) = recording();
+		let text = "x".repeat(DEFAULT_EVAL_THRESHOLD + 50);
+		let body = make_body(vec![
+			delta_bytes(&text),
+			sse_bytes("{\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}"),
+			sse_bytes("[DONE]"),
+		]);
+		let out = guarded_with_usage(body, evaluator)
+			.collect()
+			.await
+			.unwrap()
+			.to_bytes();
+		assert!(contains(&out, b"[DONE]"));
+		let seen = seen.lock().unwrap();
+		assert_eq!(seen.len(), 2);
+		assert_eq!(seen[0].0.len(), text.len());
+		assert!(!seen[0].1.is_final);
+		assert_eq!(seen[1].0, "", "the final window carries no overlap");
+		assert!(seen[1].1.is_final);
+		assert_eq!(seen[1].1.index, 1);
+		assert!(ended.lock().unwrap().is_empty());
+	}
+
+	/// A client that drops the body while the final window's call is in flight still gets the end
+	/// reported, once, at the same position the final window had.
+	#[tokio::test]
+	async fn an_abort_during_the_final_call_reports_the_end_at_the_same_index() {
+		let (evaluator, seen, ended) = recording_with(OnFinal::Hang);
+		let body = make_body(vec![delta_bytes("hi"), sse_bytes("[DONE]")]);
+		let mut guarded = guarded_with_usage(body, evaluator);
+		let waited = tokio::time::timeout(std::time::Duration::from_millis(50), guarded.frame()).await;
+		assert!(waited.is_err(), "the final call never answers");
+		drop(guarded);
+		let seen = seen.lock().unwrap();
+		assert_eq!(seen.len(), 1);
+		assert!(seen[0].1.is_final);
+		assert_eq!(*ended.lock().unwrap(), vec![seen[0].1.index]);
+	}
+
+	/// A block on the final window withholds the held tail and reports nothing more: the final
+	/// window's own call already carried the end.
+	#[tokio::test]
+	async fn a_block_on_the_final_window_withholds_the_tail_and_sends_no_second_call() {
+		let (evaluator, seen, ended) = recording_with(OnFinal::Block);
+		let body = make_body(vec![delta_bytes("hi"), sse_bytes("[DONE]")]);
+		let out = guarded_with_usage(body, evaluator)
+			.collect()
+			.await
+			.unwrap()
+			.to_bytes();
+		assert!(!contains(&out, b"[DONE]"));
+		assert!(contains(&out, b"blocked at the end"));
+		assert_eq!(seen.lock().unwrap().len(), 1);
+		assert!(ended.lock().unwrap().is_empty());
+	}
+
+	fn stream_usage() -> StreamUsage {
+		StreamUsage::new(crate::telemetry::log::AsyncLog::default(), None)
+	}
+
+	/// A stream that reaches its end reports it in the last window, synchronously and before the
+	/// held tail is released; the detached finisher does not run.
+	#[tokio::test]
+	async fn the_last_window_is_final_and_the_finisher_does_not_run_after_it() {
+		let (evaluator, seen, ended) = recording();
+		let body = make_body(vec![delta_bytes("hi"), sse_bytes("[DONE]")]);
+		let guarded = GuardedSseBody::with_usage(
+			body,
+			vec![evaluator],
+			1024 * 1024,
+			None,
+			DEFAULT_EVAL_THRESHOLD,
+			Some(stream_usage()),
+		);
+		let out = guarded.collect().await.unwrap().to_bytes();
+		assert!(contains(&out, b"[DONE]"));
+		let seen = seen.lock().unwrap();
+		assert_eq!(seen.len(), 1);
+		assert_eq!(seen[0].0, "hi");
+		assert!(seen[0].1.is_final);
+		assert_eq!(seen[0].1.index, 0);
+		assert!(ended.lock().unwrap().is_empty());
+	}
+
+	/// A stream with no text at all still ends with one empty final window when a finisher exists.
+	#[tokio::test]
+	async fn a_stream_without_text_still_gets_an_empty_final_window() {
+		let (evaluator, seen, ended) = recording();
+		let body = make_body(vec![sse_bytes(
+			"{\"choices\":[{\"delta\":{\"tool_calls\":[]}}]}",
+		)]);
+		let guarded = GuardedSseBody::with_usage(
+			body,
+			vec![evaluator],
+			1024 * 1024,
+			None,
+			DEFAULT_EVAL_THRESHOLD,
+			Some(stream_usage()),
+		);
+		guarded.collect().await.unwrap();
+		let seen = seen.lock().unwrap();
+		assert_eq!(seen.len(), 1);
+		assert_eq!(seen[0].0, "");
+		assert!(seen[0].1.is_final);
+		assert!(ended.lock().unwrap().is_empty());
+	}
+
+	/// A client that drops the stream before its end gets the detached finisher, once.
+	#[tokio::test]
+	async fn an_abandoned_stream_runs_the_finisher_once() {
+		use futures_util::{StreamExt as _, stream};
+		let (evaluator, seen, ended) = recording();
+		// One small delta, then an upstream that never ends: the frame is held below the threshold.
+		let stream = stream::iter(vec![Ok::<Bytes, std::convert::Infallible>(delta_bytes(
+			"hi",
+		))])
+		.chain(stream::pending());
+		let body = agent_http::RawBody::from_stream(stream);
+		let mut guarded = GuardedSseBody::with_usage(
+			body,
+			vec![evaluator],
+			1024 * 1024,
+			None,
+			DEFAULT_EVAL_THRESHOLD,
+			Some(stream_usage()),
+		);
+		// The client gives up waiting and drops the body.
+		let waited = tokio::time::timeout(std::time::Duration::from_millis(50), guarded.frame()).await;
+		assert!(waited.is_err(), "nothing is released below the threshold");
+		drop(guarded);
+		assert!(seen.lock().unwrap().is_empty());
+		assert_eq!(
+			*ended.lock().unwrap(),
+			vec![0],
+			"one call, at the next position"
+		);
 	}
 
 	#[tokio::test]
