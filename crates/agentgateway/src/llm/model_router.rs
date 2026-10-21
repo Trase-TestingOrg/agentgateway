@@ -145,14 +145,20 @@ pub fn serving_route_matches() -> Vec<crate::types::agent::RouteMatch> {
 }
 
 pub fn classify_route(path: &str) -> Option<llm::RouteType> {
+	classify_serving_endpoint(path).flatten()
+}
+
+/// Like [`classify_route`], but distinguishes a known endpoint that selects the model's
+/// passthrough mode (`Some(None)`: audio, Bedrock's native paths) from a path the table does not
+/// know (`None`).
+pub fn classify_serving_endpoint(path: &str) -> Option<Option<llm::RouteType>> {
 	for (matcher, kind, _) in SERVING_ENDPOINTS.iter() {
 		let matched = match matcher {
 			EndpointMatch::Exact(expected) => expected.as_str() == path,
 			EndpointMatch::Regex(regex) => regex.is_match(path),
 		};
 		if matched {
-			// Audio and Bedrock endpoints deliberately select the model's passthrough mode.
-			return *kind;
+			return Some(*kind);
 		}
 	}
 	None
