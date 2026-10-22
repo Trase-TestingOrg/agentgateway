@@ -9,8 +9,10 @@ base="${1:-$(git describe --tags --abbrev=0 --match 'v*' --exclude '*-trase*')}"
 status=0
 while read -r sha; do
   subject=$(git log -1 --format=%s "$sha")
+  # Trailers are read from the whole body, not only the final paragraph, so a commit whose
+  # co-author line sits in its own paragraph after the ledger block still passes.
   for key in Patch-Id Upstream-Status Owner Added Drop-When; do
-    if ! git log -1 --format=%B "$sha" | git interpret-trailers --parse | grep -q "^${key}:"; then
+    if ! git log -1 --format=%b "$sha" | grep -q "^${key}: "; then
       echo "::error::commit ${sha:0:10} (\"$subject\") lacks trailer ${key}"
       status=1
     fi

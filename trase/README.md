@@ -66,6 +66,19 @@ upstream's own lint and tests plus the ledger check. The nightly rebase probe
 tries this against upstream `main` every night and fails loudly on conflict, so
 a conflict is found weeks before the tag.
 
+## Building an interim image of a branch
+
+Until the release workflow has registry secrets, `trase-build-ghcr` builds any
+ref and pushes it to this org's GitHub Container Registry. Pass the branch as
+the `ref` input; `--ref` only selects which copy of the workflow file runs:
+
+```bash
+gh workflow run trase-build-ghcr.yml --ref patch/NNN-slug -f ref=patch/NNN-slug -f image_tag=v1.6.0-trase.N
+```
+
+The run prints the image digest; check the "Patch ledger is complete" step
+names every commit of the stack you meant to build.
+
 ## Releasing
 
 ```bash

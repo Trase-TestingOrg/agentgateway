@@ -1,16 +1,19 @@
 name: trase-build-ghcr
 
 # Interim image build while the fork has no registry secrets: builds any ref with
-# upstream's Dockerfile on the runner and pushes to this org's GitHub Container
-# Registry with the job's own token. Prints the digest. Retire once
-# trase-release.yml has its Artifact Registry inputs.
+# upstream's Dockerfile and pushes to this org's GitHub Container Registry with the
+# job's own token. One native build per platform (the repo is public, so the hosted
+# arm runner is free), then one multi-arch index under the tag, like upstream's own
+# releases, so a Mac's Docker and the amd64 cluster pull the same tag. Prints the
+# index digest. Retire once trase-release.yml has its Artifact Registry inputs.
 on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Branch or tag to build (the top of the patch stack, or trase/main)
+        # No default on purpose: a dispatch that forgets it must fail, not silently build
+        # trase/main and hand back a digest without the patches.
+        description: Branch or tag to build (the top of the patch stack, or trase/main); the build checks out THIS, not the branch the workflow file came from
         required: true
-        default: trase/main
       image_tag:
         description: Image tag to push (for example v1.6.0-trase.1)
         required: true
@@ -21,10 +24,23 @@ permissions:
   id-token: write
   attestations: write
 
+env:
+  IMAGE: ghcr.io/trase-testingorg/agentgateway
+
 jobs:
-  image:
-    runs-on: ubuntu-24.04
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
+    outputs:
+      revision: ${{ steps.rev.outputs.revision }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -33,9 +49,12 @@ jobs:
           fetch-tags: true
       - name: Patch ledger is complete
         run: trase/check-patches.sh
-      - name: Image name
-        id: name
-        run: echo "image=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/agentgateway" >> "$GITHUB_OUTPUT"
+      - name: Revision of the checked-out ref
+        id: rev
+        # github.sha is the workflow file's branch, not inputs.ref; the labels must name what was built.
+        run: |
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "slug=$(echo '${{ matrix.platform }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
@@ -47,25 +66,62 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ steps.name.outputs.image }}:${{ inputs.image_tag }}
-            ${{ steps.name.outputs.image }}:sha-${{ github.sha }}
+          platforms: ${{ matrix.platform }}
           labels: |
             org.opencontainers.image.version=${{ inputs.image_tag }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.rev.outputs.revision }}
           build-args: |
             VERSION=${{ inputs.image_tag }}
-            GIT_REVISION=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            GIT_REVISION=${{ steps.rev.outputs.revision }}
+          # Pushed by digest only; the merge job puts the tag on the index.
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ steps.rev.outputs.slug }}
+          cache-to: type=gha,mode=max,scope=${{ steps.rev.outputs.slug }}
+      - name: Export the platform digest
+        run: |
+          mkdir -p /tmp/digests
+          digest='${{ steps.build.outputs.digest }}'
+          touch "/tmp/digests/${digest#sha256:}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: digest-${{ steps.rev.outputs.slug }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - name: One index under the tag
+        id: index
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            -t '${{ env.IMAGE }}:${{ inputs.image_tag }}' \
+            -t '${{ env.IMAGE }}:sha-${{ needs.build.outputs.revision }}' \
+            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
+          digest="$(docker buildx imagetools inspect '${{ env.IMAGE }}:${{ inputs.image_tag }}' --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
-          subject-name: ${{ steps.name.outputs.image }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.index.outputs.digest }}
           push-to-registry: true
       - name: Pin this
         run: |
-          echo "image: \`${{ steps.name.outputs.image }}@${{ steps.build.outputs.digest }}\`" | tee -a "$GITHUB_STEP_SUMMARY"
-          echo "built ${{ inputs.ref }} at ${{ github.sha }}; patches above $(git describe --tags --abbrev=0 --match 'v*'): $(git rev-list --count --no-merges $(git describe --tags --abbrev=0 --match 'v*')..HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "image: \`${{ env.IMAGE }}@${{ steps.index.outputs.digest }}\`" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "built ${{ inputs.ref }} at ${{ needs.build.outputs.revision }} for linux/amd64 and linux/arm64" | tee -a "$GITHUB_STEP_SUMMARY"
+          docker buildx imagetools inspect '${{ env.IMAGE }}:${{ inputs.image_tag }}' | tee -a "$GITHUB_STEP_SUMMARY"
